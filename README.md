@@ -12,7 +12,7 @@
 
 ## ⚠️ Known Issues
 
-> [!NOTE]  
+> [!CAUTION]  
 > Currently, items must be manually copied from the UI to be available in `Ctrl + V`. We're actively working on resolving this issue to make the process smoother and fully integrated.
 
 ## 🚀 Installation
