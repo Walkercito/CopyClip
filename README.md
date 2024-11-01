@@ -1,6 +1,6 @@
 # 📋 CopyClip
 
-[Test](./logo.png)  
+[Test](logo.png)  
 **CopyClip** is an open-source clipboard manager for Linux, inspired by the advanced clipboard features of Windows 10. Easily manage your clipboard history with intuitive controls and quick access to your most recent items.
 
 ## ✨ Features
