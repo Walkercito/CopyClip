@@ -30,10 +30,12 @@ class HotkeyManager:
             time.sleep(0.1)
             content = self.clipboard_manager.check_for_new_content()
             if content:
+                # Add to history
                 self.history_manager.add_to_history(content)
+                # Keep it as current clipboard content
+                self.clipboard_manager.set_clipboard_content(content)
         elif keysym == XK.XK_v and self.alt_pressed:
             self.ui_manager.show_clipboard()
-
     def key_released(self, key):
         keycode = key.detail
         keysym = self.display.keycode_to_keysym(keycode, 0)
