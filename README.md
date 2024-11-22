@@ -12,10 +12,8 @@
 - 🔄 **Auto-clear on Reboot**: Automatically clear your clipboard history when you restart your computer (with an option to pin items to prevent deletion).
 - 🖼️ **Simple UI**: Access your clipboard history through a clean and user-friendly interface.
 
-## ⚠️ Known Issues
-
-> [!CAUTION]  
-> Currently, items must be manually copied from the UI to be available in `Ctrl + V`. We're actively working on resolving this issue to make the process smoother and fully integrated.
+> [!WARNING]  
+> The executable has not been compiled to the latest changes of the code, when this is done, this message will disapper.
 
 ## 🚀 Installation
 
@@ -63,7 +61,7 @@ We welcome contributions! Here's how you can get involved:
 
 ## 🗺️ Roadmap
 
-- 🛠️ **Bug Fix**: Integrate clipboard entries directly with `Ctrl + V` functionality.
+- 🛠️ **Bug Fix**: Integrate clipboard entries directly with `Ctrl + V` functionality. [FIXED]
 - 💻 **UI Improvements**: Enhance UI to provide a Windows 11-like experience.
 - ✒️ **Feature**: Add support for rich text and image copying.
 
