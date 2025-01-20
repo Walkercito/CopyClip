@@ -5,6 +5,7 @@ from code.history_manager import HistoryManager
 from code.ui import UIManager
 from code.hotkeys import HotkeyManager
 
+
 def main():
     clipboard_manager = ClipboardManager()
     history_manager = HistoryManager(clipboard_manager)

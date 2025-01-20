@@ -8,6 +8,7 @@ class UIManager:
     def __init__(self, history_manager):
         self.history_manager = history_manager
         self.window_pinned = False
+        self.pin_button = None 
         
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
@@ -19,6 +20,7 @@ class UIManager:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=1)
         
+        self.settings = {}
         self.create_gui()
         self.load_settings()
         
@@ -72,11 +74,12 @@ class UIManager:
             command=self.show_settings
         ).grid(row=0, column=1, padx=5, pady=5)
         
-        ctk.CTkButton(
+        self.pin_button = ctk.CTkButton(
             button_frame,
             text="Pin Window",
             command=self.toggle_pin
-        ).grid(row=0, column=2, padx=5, pady=5)
+        )
+        self.pin_button.grid(row=0, column=2, padx=5, pady=5)
 
     def create_clip_frame(self, item):
         clip_frame = ctk.CTkFrame(self.clips_frame)
@@ -130,44 +133,34 @@ class UIManager:
         self.root.after(1000, self.check_clipboard_updates)
 
     def copy_to_clipboard(self, content):
-        """Copy content to clipboard with error handling and feedback.
-        
-        Args:
-            content: The text content to copy to clipboard
-            
-        Returns:
-            bool: True if copy was successful, False otherwise
-        """
+        """Copy content to clipboard with error handling, feedback, and delay."""
         if not content:
             self.show_feedback("Nothing to copy", "warning")
             return False
         
         try:
             success = self.history_manager.clipboard_manager.set_clipboard_content(content)
+            
             if success:
                 self.show_feedback("Copied successfully!", "success")
-                self.hide_clipboard()
+                self.root.after(1000, self.hide_clipboard)
                 return True
             else:
                 self.show_feedback("Failed to copy content", "error")
                 return False
+                
         except Exception as e:
             print(f"Error copying to clipboard: {e}")
             self.show_feedback(f"Error copying: {str(e)}", "error")
             return False
 
     def show_feedback(self, message, type_="info"):
-        """Show feedback message to user.
-        
-        Args:
-            message: The message to display
-            type_: The type of message ('success', 'error', 'warning', 'info')
-        """
+        """Show feedback message to user."""
         colors = {
-            'success': ('#00FF00', '#004400'),  # Green clear/dark
-            'error': ('#FF0000', '#440000'),    # Red clear/dark
-            'warning': ('#FFFF00', '#444400'),  # Yellow clear/dark
-            'info': ('#0000FF', '#000044')      # Blue clear/dark
+            'success': ("green", "white"),
+            'error': ("red", "white"),
+            'warning': ("orange", "black"),
+            'info': ("blue", "white")
         }
         
         fg_color, text_color = colors.get(type_, colors['info'])
@@ -182,7 +175,7 @@ class UIManager:
             pady=5
         )
         feedback.place(relx=0.5, rely=0.9, anchor="center")
-        self.root.after(2000, feedback.destroy)  # remove after 2 seconds
+        self.root.after(2000, feedback.destroy)
 
     def toggle_clip_pin(self, content):
         self.history_manager.toggle_pin(content)
@@ -203,31 +196,30 @@ class UIManager:
         self.filter_clips()
 
     def clear_history(self):
-        """Clear the clipboard history while preserving pinned items."""
         self.history_manager.clear_history()
         self.update_clips_display()
 
     def toggle_pin(self):
         """Toggle window pin state and apply window constraints."""
-        self.window_pinned = not self.window_pinned
-        self.root.attributes('-topmost', self.window_pinned)
-        
-        if self.window_pinned:
-            self.root.protocol("WM_DELETE_WINDOW", lambda: None)
-            self.root.resizable(False, False)
-            self.root.overrideredirect(True)  
-        else:
-            self.root.protocol("WM_DELETE_WINDOW", self.hide_clipboard)
-            self.root.resizable(True, True)
-            self.root.overrideredirect(False) 
-        
-        self.settings['window_pinned'] = self.window_pinned
-        self.save_settings()
-        
-        pin_button = [btn for btn in self.root.winfo_children() 
-                    if isinstance(btn, ctk.CTkButton) and 
-                    btn.cget("text") in ["Pin Window", "Unpin Window"]][0]
-        pin_button.configure(text="Unpin Window" if self.window_pinned else "Pin Window")
+        try:
+            self.window_pinned = not self.window_pinned
+            
+            self.root.attributes('-topmost', self.window_pinned)
+            
+            if self.window_pinned:
+                self.root.protocol("WM_DELETE_WINDOW", lambda: None)
+                self.root.resizable(False, False)
+                self.pin_button.configure(text="Unpin Window")
+            else:
+                self.root.protocol("WM_DELETE_WINDOW", self.hide_clipboard)
+                self.root.resizable(True, True)
+                self.pin_button.configure(text="Pin Window")
+            
+            self.settings['window_pinned'] = self.window_pinned
+            self.save_settings()
+            
+        except Exception as e:
+            print(f"Error in toggle_pin: {e}")
     
     def show_clipboard(self):
         """Shows the clipboard window"""
@@ -235,34 +227,54 @@ class UIManager:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
-        # Clear search when showing
         self.clear_search()
-        # Focus search entry for quick filtering
         self.search_entry.focus_set()
 
     def hide_clipboard(self):
         """Hides the clipboard window instead of closing the application"""
         self.root.withdraw()
-        # Clear search when hiding
         self.clear_search()
 
     def load_settings(self):
+        """Load settings with error handling."""
         self.settings = {}
-        settings_dir = os.path.dirname(self.history_manager.history_file)
-        settings_file = os.path.join(settings_dir, 'settings.json')
-        
-        # Ensure directory exists
-        os.makedirs(settings_dir, exist_ok=True)
-        
         try:
+            settings_dir = os.path.dirname(self.history_manager.history_file)
+            settings_file = os.path.join(settings_dir, 'settings.json')
+            os.makedirs(settings_dir, exist_ok=True)
+            
             if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
-                    self.settings = json.load(f)
-                    
-                # Apply settings
-                self.change_theme(self.settings.get('theme', 'dark'))
+                try:
+                    with open(settings_file, 'r', encoding='utf-8') as f:
+                        self.settings = json.load(f)
+                except json.JSONDecodeError:
+                    print("Settings file is corrupted, using defaults")
+                    corrupted_file = f"{settings_file}.corrupted"
+                    os.rename(settings_file, corrupted_file)
+                except Exception as e:
+                    print(f"Error loading settings: {e}")
+            
+            self.apply_settings()
+            
         except Exception as e:
-            print(f"Error loading settings: {e}")
+            print(f"Error in load_settings: {e}")
+            self.settings = {
+                'theme': 'dark',
+                'window_pinned': False
+            }
+
+    def apply_settings(self):
+        """Apply settings with default values if needed."""
+        try:
+            theme = self.settings.get('theme', 'dark')
+            self.change_theme(theme)
+            
+            if self.settings.get('window_pinned', False):
+                self.window_pinned = True
+                self.toggle_pin()
+                
+        except Exception as e:
+            print(f"Error applying settings: {e}")
 
     def save_settings(self):
         settings_file = os.path.join(
