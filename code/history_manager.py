@@ -15,10 +15,7 @@ class HistoryManager:
         """
         self.clipboard_manager = clipboard_manager
         self.data_dir = os.path.join(
-            os.getenv('XDG_DATA_HOME', 
-                     os.path.expanduser('~/.local/share')),
-            'clipboard-manager'
-        )
+            os.getenv('XDG_DATA_HOME', os.path.expanduser('~/.local/share')), 'clipboard-manager')
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)
         
         self.history_file = os.path.join(self.data_dir, 'clipboard_history.json')
