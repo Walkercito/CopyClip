@@ -34,6 +34,12 @@ class HistoryManager:
         except Exception as e:
             print(f"Error loading history: {e}")
         return []
+    
+    def get_pinned_items(self):
+        """Get all pinned items from history."""
+        return [item for item in self.history if item['pinned']]
+
+
 
     def save_history(self):
         """Save the current clipboard history to the JSON file."""
@@ -83,6 +89,19 @@ class HistoryManager:
                 self.save_history()
                 return item['pinned']
         return False
+    
+    def clear_history(self):
+        """Clear history while preserving pinned items.
+        
+        This method will:
+        1. Get all pinned items
+        2. Keep only pinned items in history
+        3. Save the updated history
+        """
+        # Get all pinned items before clearing
+        pinned_items = [item for item in self.history if item.get('pinned', False)]
+        self.history = pinned_items
+        self.save_history()
 
     def remove_item(self, content):
         """Remove an item from the history.
@@ -93,10 +112,28 @@ class HistoryManager:
         self.history = [item for item in self.history if item['content'] != content]
         self.save_history()
 
-    def get_history(self):
-        """Get the current clipboard history.
+    def get_sorted_history(self):
+        """Get history with pinned items first, then unpinned items in chronological order.
         
         Returns:
-            list: The current clipboard history.
+            list: Sorted history with pinned items first
         """
-        return self.history
+        # Separar items pinned y no pinned
+        pinned = [item for item in self.history if item.get('pinned', False)]
+        unpinned = [item for item in self.history if not item.get('pinned', False)]
+        
+        # Ordenar cada grupo por timestamp (más reciente primero)
+        pinned.sort(key=lambda x: x['timestamp'], reverse=True)
+        unpinned.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # Retornar la lista combinada
+        return pinned + unpinned
+
+    # Modificar el método get_history existente para usar get_sorted_history
+    def get_history(self):
+        """Get the current clipboard history with pinned items first.
+        
+        Returns:
+            list: The current clipboard history, sorted with pinned items first
+        """
+        return self.get_sorted_history()

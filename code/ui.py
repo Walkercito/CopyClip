@@ -7,6 +7,7 @@ import os
 class UIManager:
     def __init__(self, history_manager):
         self.history_manager = history_manager
+        self.window_pinned = False
         
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
@@ -129,8 +130,59 @@ class UIManager:
         self.root.after(1000, self.check_clipboard_updates)
 
     def copy_to_clipboard(self, content):
-        self.history_manager.clipboard_manager.set_clipboard_content(content)
-        self.hide_clipboard()
+        """Copy content to clipboard with error handling and feedback.
+        
+        Args:
+            content: The text content to copy to clipboard
+            
+        Returns:
+            bool: True if copy was successful, False otherwise
+        """
+        if not content:
+            self.show_feedback("Nothing to copy", "warning")
+            return False
+        
+        try:
+            success = self.history_manager.clipboard_manager.set_clipboard_content(content)
+            if success:
+                self.show_feedback("Copied successfully!", "success")
+                self.hide_clipboard()
+                return True
+            else:
+                self.show_feedback("Failed to copy content", "error")
+                return False
+        except Exception as e:
+            print(f"Error copying to clipboard: {e}")
+            self.show_feedback(f"Error copying: {str(e)}", "error")
+            return False
+
+    def show_feedback(self, message, type_="info"):
+        """Show feedback message to user.
+        
+        Args:
+            message: The message to display
+            type_: The type of message ('success', 'error', 'warning', 'info')
+        """
+        colors = {
+            'success': ('#00FF00', '#004400'),  # Green clear/dark
+            'error': ('#FF0000', '#440000'),    # Red clear/dark
+            'warning': ('#FFFF00', '#444400'),  # Yellow clear/dark
+            'info': ('#0000FF', '#000044')      # Blue clear/dark
+        }
+        
+        fg_color, text_color = colors.get(type_, colors['info'])
+        
+        feedback = ctk.CTkLabel(
+            self.root,
+            text=message,
+            fg_color=fg_color,
+            text_color=text_color,
+            corner_radius=8,
+            padx=10,
+            pady=5
+        )
+        feedback.place(relx=0.5, rely=0.9, anchor="center")
+        self.root.after(2000, feedback.destroy)  # remove after 2 seconds
 
     def toggle_clip_pin(self, content):
         self.history_manager.toggle_pin(content)
@@ -151,13 +203,31 @@ class UIManager:
         self.filter_clips()
 
     def clear_history(self):
-        self.history_manager.history = []
-        self.history_manager.save_history()
+        """Clear the clipboard history while preserving pinned items."""
+        self.history_manager.clear_history()
         self.update_clips_display()
 
     def toggle_pin(self):
-        current_state = self.root.attributes('-topmost')
-        self.root.attributes('-topmost', not current_state)
+        """Toggle window pin state and apply window constraints."""
+        self.window_pinned = not self.window_pinned
+        self.root.attributes('-topmost', self.window_pinned)
+        
+        if self.window_pinned:
+            self.root.protocol("WM_DELETE_WINDOW", lambda: None)
+            self.root.resizable(False, False)
+            self.root.overrideredirect(True)  
+        else:
+            self.root.protocol("WM_DELETE_WINDOW", self.hide_clipboard)
+            self.root.resizable(True, True)
+            self.root.overrideredirect(False) 
+        
+        self.settings['window_pinned'] = self.window_pinned
+        self.save_settings()
+        
+        pin_button = [btn for btn in self.root.winfo_children() 
+                    if isinstance(btn, ctk.CTkButton) and 
+                    btn.cget("text") in ["Pin Window", "Unpin Window"]][0]
+        pin_button.configure(text="Unpin Window" if self.window_pinned else "Pin Window")
     
     def show_clipboard(self):
         """Shows the clipboard window"""
