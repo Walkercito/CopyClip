@@ -15,6 +15,26 @@
 > [!WARNING]  
 > The executable has not been compiled to the latest changes of the code, when this is done, this message will disapper.
 
+## 📦 Dependencies
+
+**CopyClip** requires the following packages to function properly. Install them before running the application:
+
+Linux (Debian/Ubuntu)
+```bash
+sudo apt-get install xsel python3-xlib
+```
+Linux (Fedora)
+```
+sudo dnf install xsel python3-xlib
+```
+Linux (Arch/Manjaro)
+```
+sudo pacman -S xsel python-xlib
+```
+
+> [!NOTE]  
+> These dependencies are required for clipboard operations (`xsel`) and hotkey detection (`python3-xlib`). If the app fails to start, verify they're installed correctly.
+
 ## 🚀 Installation
 
 To install **CopyClip**, follow these steps:
