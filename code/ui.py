@@ -1,139 +1,179 @@
 # ui.py
-import customtkinter as ctk
-from datetime import datetime
-import json
+import sys
 import os
+import json
+from datetime import datetime
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                           QHBoxLayout, QFrame, QLabel, QPushButton, 
+                           QLineEdit, QScrollArea, QMessageBox, QComboBox)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QIcon, QKeySequence, QShortcut
 
-class UIManager:
+class ClipFrame(QFrame):
+    """Custom widget to represent each clipboard item"""
+    def __init__(self, item, parent=None):
+        super().__init__(parent)
+        self.content = item['content']
+        self.pinned = item['pinned']
+        self.timestamp = item['timestamp']
+        
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QFrame.Shadow.Raised)
+        
+        # Styles
+        self.setObjectName("clipFrame")
+        self.setStyleSheet("""
+            #clipFrame {
+                background-color: #2b2b2b;
+                border-radius: 5px;
+                margin: 3px;
+            }
+        """)
+        
+        layout = QHBoxLayout(self)
+
+        content_preview = (self.content[:50] + "...") if len(self.content) > 50 else self.content
+        label = QLabel(f"{self.timestamp}\n{content_preview}")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        
+        pin_text = "Unpin" if self.pinned else "Pin"
+        self.pin_btn = QPushButton(pin_text)
+        self.pin_btn.setFixedWidth(60)
+        
+        copy_btn = QPushButton("Copy")
+        copy_btn.setFixedWidth(60)
+        
+        layout.addWidget(label, 1)
+        layout.addWidget(self.pin_btn)
+        layout.addWidget(copy_btn)
+        
+        self.setLayout(layout)
+
+class FeedbackLabel(QLabel):
+    """Custom label to display feedback messages"""
+    def __init__(self, message, type_="info", parent=None):
+        super().__init__(message, parent)
+        
+        colors = {
+            'success': ("background-color: #28a745; color: white;"),
+            'error': ("background-color: #dc3545; color: white;"),
+            'warning': ("background-color: #ffc107; color: black;"),
+            'info': ("background-color: #17a2b8; color: white;")
+        }
+        
+        style = colors.get(type_, colors['info'])
+        self.setStyleSheet(f"""
+            padding: 5px 10px;
+            border-radius: 8px;
+            {style}
+        """)
+        
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = QFont()
+        font.setBold(True)
+        self.setFont(font)
+
+class UIManager(QMainWindow):
     def __init__(self, history_manager):
+        super().__init__()
         self.history_manager = history_manager
         self.window_pinned = False
-        self.pin_button = None 
-        
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("dark-blue")
-        
-        self.root = ctk.CTk()
-        self.root.title("CopyClip")
-        self.root.geometry("300x500")
-        
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(1, weight=1)
-        
+        self.clip_frames = []
         self.settings = {}
-        self.create_gui()
+        
+        self.setWindowTitle("CopyClip")
+        self.setGeometry(100, 100, 300, 500)
         self.load_settings()
+        self.create_gui()
+        self.hide()
+
+        self.clipboard_timer = QTimer(self)
+        self.clipboard_timer.timeout.connect(self.check_clipboard_updates)
+        self.clipboard_timer.start(1000)
         
-        self.root.withdraw()
-        
-        self.root.protocol("WM_DELETE_WINDOW", self.hide_clipboard)
-        self.root.bind('<Escape>', lambda e: self.hide_clipboard())
-        self.root.after(1000, self.check_clipboard_updates)
+        shortcut = QShortcut(QKeySequence("Esc"), self)
+        shortcut.activated.connect(self.hide_clipboard)
+
 
     def create_gui(self):
-        search_frame = ctk.CTkFrame(self.root, height=40)
-        search_frame.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
-        search_frame.grid_columnconfigure(0, weight=1)
-        
-        self.search_var = ctk.StringVar()
-        self.search_entry = ctk.CTkEntry(
-            search_frame,
-            placeholder_text="Search clips...",
-            height=32,
-            textvariable=self.search_var
-        )
-        self.search_entry.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-        self.search_var.trace('w', lambda *args: self.filter_clips())
-        
-        clear_button = ctk.CTkButton(
-            search_frame,
-            text="×",
-            width=32,
-            height=32,
-            command=self.clear_search
-        )
-        clear_button.grid(row=0, column=1, padx=5, pady=5)
-        
-        self.clips_frame = ctk.CTkScrollableFrame(self.root)
-        self.clips_frame.grid(row=1, column=0, padx=10, pady=(5, 10), sticky="nsew")
-        self.clips_frame.grid_columnconfigure(0, weight=1)
-        
-        button_frame = ctk.CTkFrame(self.root)
-        button_frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="ew")
-        button_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        central_widget = QWidget()
+        main_layout = QVBoxLayout(central_widget)
 
-        ctk.CTkButton(
-            button_frame,
-            text="Clear All",
-            command=self.clear_history
-        ).grid(row=0, column=0, padx=5, pady=5)
+        search_frame = QFrame()
+        search_layout = QHBoxLayout(search_frame)
         
-        ctk.CTkButton(
-            button_frame,
-            text="Settings",
-            command=self.show_settings
-        ).grid(row=0, column=1, padx=5, pady=5)
+        self.search_entry = QLineEdit()
+        self.search_entry.setPlaceholderText("Search clips...")
+        self.search_entry.textChanged.connect(self.filter_clips)
         
-        self.pin_button = ctk.CTkButton(
-            button_frame,
-            text="Pin Window",
-            command=self.toggle_pin
-        )
-        self.pin_button.grid(row=0, column=2, padx=5, pady=5)
-
-    def create_clip_frame(self, item):
-        clip_frame = ctk.CTkFrame(self.clips_frame)
-        clip_frame.grid(sticky="ew", padx=5, pady=2)
-        clip_frame.grid_columnconfigure(0, weight=1)
+        clear_button = QPushButton("×")
+        clear_button.setFixedSize(32, 32)
+        clear_button.clicked.connect(self.clear_search)
         
-        content = item['content']
-        content_preview = (content[:50] + "...") if len(content) > 50 else content
+        search_layout.addWidget(self.search_entry)
+        search_layout.addWidget(clear_button)
         
-        label = ctk.CTkLabel(
-            clip_frame,
-            text=f"{item['timestamp']}\n{content_preview}",
-            justify="left",
-            anchor="w"
-        )
-        label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.clips_scroll_area = QScrollArea()
+        self.clips_scroll_area.setWidgetResizable(True)
+        self.clips_content = QWidget()
+        self.clips_layout = QVBoxLayout(self.clips_content)
+        self.clips_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.clips_scroll_area.setWidget(self.clips_content)
         
-        pin_text = "Unpin" if item['pinned'] else "Pin"
-        pin_btn = ctk.CTkButton(
-            clip_frame,
-            text=pin_text,
-            width=60,
-            command=lambda: self.toggle_clip_pin(content)
-        )
-        pin_btn.grid(row=0, column=1, padx=5, pady=5)
+        button_frame = QFrame()
+        button_layout = QHBoxLayout(button_frame)
         
-        copy_btn = ctk.CTkButton(
-            clip_frame,
-            text="Copy",
-            width=60,
-            command=lambda: self.copy_to_clipboard(content)
-        )
-        copy_btn.grid(row=0, column=2, padx=5, pady=5)
+        clear_btn = QPushButton("Clear All")
+        clear_btn.clicked.connect(self.clear_history)
         
-        return clip_frame
+        settings_btn = QPushButton("Settings")
+        settings_btn.clicked.connect(self.show_settings)
+        
+        self.pin_button = QPushButton("Pin Window")
+        self.pin_button.clicked.connect(self.toggle_pin)
+        
+        button_layout.addWidget(clear_btn)
+        button_layout.addWidget(settings_btn)
+        button_layout.addWidget(self.pin_button)
+        
+        main_layout.addWidget(search_frame)
+        main_layout.addWidget(self.clips_scroll_area, 1)
+        main_layout.addWidget(button_frame)
+        
+        self.setCentralWidget(central_widget)
+        self.apply_theme()
+    
 
     def update_clips_display(self):
-        # Clear existing clips
-        for widget in self.clips_frame.winfo_children():
-            widget.destroy()
+        # Clear existing widgets
+        for i in reversed(range(self.clips_layout.count())): 
+            self.clips_layout.itemAt(i).widget().setParent(None)
+        
+        self.clip_frames = []
         
         # Add clips from history
         for item in self.history_manager.get_history():
-            self.create_clip_frame(item)
+            clip_frame = ClipFrame(item)
+            clip_frame.pin_btn.clicked.connect(lambda _, content=item['content']: self.toggle_clip_pin(content))
+            
+            copy_btn = clip_frame.findChild(QPushButton, "", Qt.FindChildOption.FindChildrenRecursively)
+            if copy_btn and copy_btn.text() == "Copy":
+                copy_btn.clicked.connect(lambda _, content=item['content']: self.copy_to_clipboard(content))
+            
+            self.clips_layout.addWidget(clip_frame)
+            self.clip_frames.append(clip_frame)
+
 
     def check_clipboard_updates(self):
         content = self.history_manager.clipboard_manager.check_for_new_content()
         if content:
             self.history_manager.add_to_history(content)
             self.update_clips_display()
-        self.root.after(1000, self.check_clipboard_updates)
+
 
     def copy_to_clipboard(self, content):
-        """Copy content to clipboard with error handling, feedback, and delay."""
+        """Copy content to clipboard with error handling and feedback"""
         if not content:
             self.show_feedback("Nothing to copy", "warning")
             return False
@@ -143,7 +183,7 @@ class UIManager:
             
             if success:
                 self.show_feedback("Copied successfully!", "success")
-                self.root.after(1000, self.hide_clipboard)
+                QTimer.singleShot(1000, self.hide_clipboard)
                 return True
             else:
                 self.show_feedback("Failed to copy content", "error")
@@ -154,66 +194,60 @@ class UIManager:
             self.show_feedback(f"Error copying: {str(e)}", "error")
             return False
 
+
     def show_feedback(self, message, type_="info"):
-        """Show feedback message to user."""
-        colors = {
-            'success': ("green", "white"),
-            'error': ("red", "white"),
-            'warning': ("orange", "black"),
-            'info': ("blue", "white")
-        }
-        
-        fg_color, text_color = colors.get(type_, colors['info'])
-        
-        feedback = ctk.CTkLabel(
-            self.root,
-            text=message,
-            fg_color=fg_color,
-            text_color=text_color,
-            corner_radius=8,
-            padx=10,
-            pady=5
+        """Show feedback message to user"""
+        feedback = FeedbackLabel(message, type_, self)
+
+        feedback.move(
+            (self.width() - feedback.width()) // 2,
+            self.height() - 60
         )
-        feedback.place(relx=0.5, rely=0.9, anchor="center")
-        self.root.after(2000, feedback.destroy)
+        
+        feedback.show()
+
+        QTimer.singleShot(2000, feedback.deleteLater)
+
 
     def toggle_clip_pin(self, content):
         self.history_manager.toggle_pin(content)
         self.update_clips_display()
 
+
     def filter_clips(self):
-        search_text = self.search_var.get().lower()
-        for widget in self.clips_frame.winfo_children():
-            if isinstance(widget, ctk.CTkFrame):
-                label = widget.winfo_children()[0]
-                if search_text in label.cget("text").lower():
-                    widget.grid()
-                else:
-                    widget.grid_remove()
+        search_text = self.search_entry.text().lower()
+        for frame in self.clip_frames:
+            if search_text in frame.content.lower() or search_text in frame.timestamp.lower():
+                frame.show()
+            else:
+                frame.hide()
+
 
     def clear_search(self):
-        self.search_var.set("")
+        self.search_entry.clear()
         self.filter_clips()
+
 
     def clear_history(self):
         self.history_manager.clear_history()
         self.update_clips_display()
 
+
     def toggle_pin(self):
-        """Toggle window pin state and apply window constraints."""
+        """Toggle window pin state and apply restrictions"""
         try:
             self.window_pinned = not self.window_pinned
             
-            self.root.attributes('-topmost', self.window_pinned)
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, self.window_pinned)
+            self.show()
             
             if self.window_pinned:
-                self.root.protocol("WM_DELETE_WINDOW", lambda: None)
-                self.root.resizable(False, False)
-                self.pin_button.configure(text="Unpin Window")
+                self.setFixedSize(self.size())
+                self.pin_button.setText("Unpin Window")
             else:
-                self.root.protocol("WM_DELETE_WINDOW", self.hide_clipboard)
-                self.root.resizable(True, True)
-                self.pin_button.configure(text="Pin Window")
+                self.setMinimumSize(200, 300)
+                self.setMaximumSize(16777215, 16777215)  # Maximum value for QWidget
+                self.pin_button.setText("Pin Window")
             
             self.settings['window_pinned'] = self.window_pinned
             self.save_settings()
@@ -221,22 +255,34 @@ class UIManager:
         except Exception as e:
             print(f"Error in toggle_pin: {e}")
     
+
     def show_clipboard(self):
-        """Shows the clipboard window"""
+        """Show clipboard window"""
         self.update_clips_display()
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
+        self.show()
+        self.activateWindow()
+        self.raise_()
         self.clear_search()
-        self.search_entry.focus_set()
+        self.search_entry.setFocus()
+
 
     def hide_clipboard(self):
-        """Hides the clipboard window instead of closing the application"""
-        self.root.withdraw()
+        """Hide clipboard window instead of closing the application"""
+        self.hide()
         self.clear_search()
 
+
+    def closeEvent(self, event):
+        """Capture close event to hide instead of close"""
+        if not self.window_pinned:
+            event.ignore()
+            self.hide_clipboard()
+        else:
+            event.ignore()  # Don't allow closing when pinned
+
+
     def load_settings(self):
-        """Load settings with error handling."""
+        """Load settings with error handling"""
         self.settings = {}
         try:
             settings_dir = os.path.dirname(self.history_manager.history_file)
@@ -263,11 +309,12 @@ class UIManager:
                 'window_pinned': False
             }
 
+
     def apply_settings(self):
-        """Apply settings with default values if needed."""
+        """Apply settings with default values if needed"""
         try:
             theme = self.settings.get('theme', 'dark')
-            self.change_theme(theme)
+            self.apply_theme(theme)
             
             if self.settings.get('window_pinned', False):
                 self.window_pinned = True
@@ -275,6 +322,94 @@ class UIManager:
                 
         except Exception as e:
             print(f"Error applying settings: {e}")
+
+
+    def apply_theme(self, theme='dark'):
+        """Apply visual theme to the application"""
+        if theme == 'dark':
+            self.setStyleSheet("""
+                QMainWindow, QWidget {
+                    background-color: #1e1e1e;
+                    color: #ffffff;
+                }
+                QPushButton {
+                    background-color: #0d6efd;
+                    color: white;
+                    border: none;
+                    padding: 5px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #0b5ed7;
+                }
+                QLineEdit {
+                    background-color: #2d2d2d;
+                    color: white;
+                    border: 1px solid #3d3d3d;
+                    border-radius: 3px;
+                    padding: 5px;
+                }
+                QScrollArea, QComboBox {
+                    background-color: #2d2d2d;
+                    border: 1px solid #3d3d3d;
+                    border-radius: 3px;
+                }
+                QLabel {
+                    color: #ffffff;
+                }
+                QComboBox {
+                    padding: 5px;
+                }
+                QComboBox QAbstractItemView {
+                    background-color: #2d2d2d;
+                    color: white;
+                }
+            """)
+        elif theme == 'light':
+            self.setStyleSheet("""
+                QMainWindow, QWidget {
+                    background-color: #f8f9fa;
+                    color: #000000;
+                }
+                QPushButton {
+                    background-color: #0d6efd;
+                    color: white;
+                    border: none;
+                    padding: 5px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #0b5ed7;
+                }
+                QLineEdit {
+                    background-color: white;
+                    color: black;
+                    border: 1px solid #ced4da;
+                    border-radius: 3px;
+                    padding: 5px;
+                }
+                QScrollArea, QComboBox {
+                    background-color: white;
+                    border: 1px solid #ced4da;
+                    border-radius: 3px;
+                }
+                QLabel {
+                    color: #000000;
+                }
+                QComboBox {
+                    padding: 5px;
+                }
+                QComboBox QAbstractItemView {
+                    background-color: white;
+                    color: black;
+                }
+            """)
+        elif theme == 'system':
+            self.setStyleSheet("")  # Use system default style
+        
+        self.settings['theme'] = theme
+        self.save_settings()
+
 
     def save_settings(self):
         settings_file = os.path.join(
@@ -287,41 +422,36 @@ class UIManager:
         except Exception as e:
             print(f"Error saving settings: {e}")
 
-    def change_theme(self, theme):
-        try:
-            ctk.set_appearance_mode(theme)
-            self.settings['theme'] = theme
-            self.save_settings()
-        except Exception as e:
-            print(f"Error changing theme: {e}")
 
     def show_settings(self):
-        settings_window = ctk.CTkToplevel(self.root)
-        settings_window.title("Settings")
-        settings_window.geometry("300x400")
+        """Show settings window"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton
         
-        settings_window.update()
+        settings_dialog = QDialog(self)
+        settings_dialog.setWindowTitle("Settings")
+        settings_dialog.setFixedSize(300, 200)
         
-        x = self.root.winfo_x() + (self.root.winfo_width() - settings_window.winfo_width()) // 2
-        y = self.root.winfo_y() + (self.root.winfo_height() - settings_window.winfo_height()) // 2
-        settings_window.geometry(f"+{x}+{y}")
+        layout = QVBoxLayout(settings_dialog)
         
-        settings_window.after(100, lambda: settings_window.grab_set())
+        # Theme
+        theme_label = QLabel("Theme:")
+        layout.addWidget(theme_label)
         
-        theme_label = ctk.CTkLabel(settings_window, text="Theme:")
-        theme_label.pack(pady=(20, 5))
+        theme_combo = QComboBox()
+        theme_combo.addItems(["light", "dark", "system"])
+        theme_combo.setCurrentText(self.settings.get('theme', 'dark'))
+        theme_combo.currentTextChanged.connect(self.apply_theme)
+        layout.addWidget(theme_combo)
         
-        theme_var = ctk.StringVar(value=self.settings.get('theme', 'dark'))
-        theme_menu = ctk.CTkOptionMenu(
-            settings_window,
-            values=["light", "dark", "system"],
-            variable=theme_var,
-            command=lambda x: self.change_theme(x)
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(settings_dialog.accept)
+        layout.addWidget(close_btn, alignmvent=Qt.AlignmentFlag.AlignBottom)
+        
+        # Center dialog
+        settings_dialog.move(
+            self.x() + (self.width() - settings_dialog.width()) // 2,
+            self.y() + (self.height() - settings_dialog.height()) // 2
         )
-        theme_menu.pack(pady=5)
         
-        ctk.CTkButton(
-            settings_window,
-            text="Close",
-            command=settings_window.destroy
-        ).pack(pady=20)
+        settings_dialog.exec()

@@ -5,6 +5,13 @@ import subprocess
 from Xlib import X, XK, display
 from Xlib.ext import record
 from Xlib.protocol import rq
+from PyQt6.QtCore import QObject, pyqtSignal
+
+class HotkeySignals(QObject):
+    """Clase para manejar señales de hotkeys en el contexto de Qt"""
+    show_clipboard_signal = pyqtSignal()
+    content_copied_signal = pyqtSignal(str)
+
 
 class HotkeyManager:
     def __init__(self, clipboard_manager, history_manager, ui_manager):
@@ -19,6 +26,17 @@ class HotkeyManager:
         self.ctrl_pressed = False
         self.alt_pressed = False
         
+        self.signals = HotkeySignals()
+        self.signals.show_clipboard_signal.connect(self.ui_manager.show_clipboard)
+        self.signals.content_copied_signal.connect(self.handle_copied_content)
+
+
+    def handle_copied_content(self, content):
+        if content:
+            self.history_manager.add_to_history(content)
+            self.clipboard_manager.set_clipboard_content(content)
+
+
     def key_pressed(self, key):
         keycode = key.detail
         keysym = self.display.keycode_to_keysym(keycode, 0)
@@ -30,12 +48,11 @@ class HotkeyManager:
             time.sleep(0.1)
             content = self.clipboard_manager.check_for_new_content()
             if content:
-                # Add to history
-                self.history_manager.add_to_history(content)
-                # Keep it as current clipboard content
-                self.clipboard_manager.set_clipboard_content(content)
+                self.signals.content_copied_signal.emit(content)
         elif keysym == XK.XK_v and self.alt_pressed:
-            self.ui_manager.show_clipboard()
+            self.signals.show_clipboard_signal.emit()
+    
+
     def key_released(self, key):
         keycode = key.detail
         keysym = self.display.keycode_to_keysym(keycode, 0)
@@ -43,6 +60,7 @@ class HotkeyManager:
             self.ctrl_pressed = False
         elif keysym == XK.XK_Super_L or keysym == XK.XK_Super_R:
             self.alt_pressed = False
+
 
     def handler(self, reply):
         """ Handle key events """
@@ -60,6 +78,7 @@ class HotkeyManager:
                 self.key_pressed(event)
             elif event.type == X.KeyRelease:
                 self.key_released(event)
+
 
     def setup_hotkeys(self):
         """ Setup keyboard monitoring """
@@ -81,10 +100,12 @@ class HotkeyManager:
         
         threading.Thread(target=self.record_thread, args=(ctx,), daemon=True).start()
 
+
     def record_thread(self, ctx):
         """ Thread function for keyboard monitoring """
         self.display.record_enable_context(ctx, self.handler)
         self.display.record_free_context(ctx)
+
 
     def stop_listening(self):
         """ Stop keyboard monitoring """

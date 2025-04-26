@@ -1,2 +1,2 @@
-customtkinter
+PyQt6
 python-xlib
