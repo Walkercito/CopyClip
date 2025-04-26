@@ -80,10 +80,9 @@ class HistoryManager:
                     self.save_history()
                     return
                     
-            # Add new item
             new_item = {
                 'content': content,
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'timestamp': datetime.now().strftime("%d/%m/%y %H:%M"),
                 'pinned': False
             }
             self.history.insert(0, new_item)
