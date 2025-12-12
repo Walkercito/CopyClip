@@ -17,14 +17,14 @@
 
 ## ✨ Overview
 
-**CopyClip** is a lightweight, open-source clipboard manager for Linux, inspired by the Windows 10 clipboard.  
+**CopyClip** is a lightweight, open-source clipboard manager for Linux, inspired by the Windows 10 clipboard.
 It provides fast access to your clipboard history, pinning, search, customizable hotkeys and a clean desktop-friendly UI.
 
-🖥️ **Currently works on:**  
-- **X11 (fully supported)**  
-- **Wayland (partial; testers needed)**
+🖥️ **Display Server Support:**
+- **X11** — Full support with automatic global hotkeys
+- **Wayland** — Functional with manual hotkey setup (GNOME, KDE Plasma tested)
 
-> If you're using Wayland, please help us test global hotkey behavior and report issues!
+> **Note:** Wayland requires manual keyboard shortcut configuration due to security restrictions. See installation instructions below.
 
 ---
 
@@ -45,50 +45,92 @@ It provides fast access to your clipboard history, pinning, search, customizable
 
 ## ✨ Key Features
 
-- 🗂️ **History** — Automatic clipboard history in reverse chronological order  
-- 📌 **Pinning** — Keep important items always visible  
-- 🎛️ **Hotkeys** — Choose your preferred key binding on first launch  
-- 🔍 **Instant Search** — Filter items with a built-in search bar  
-- 🖥️ **X11 Support** — Global hotkeys work out-of-the-box  
-- 🌗 **Themes** — Dark, light, or system  
-- 🔄 **Auto-clear on Reboot** — Optional cleanup while preserving pinned items  
-- 🖼️ **Clean UI** — Simple, keyboard-friendly interface  
+- 🗂️ **Clipboard History** — Automatic history in reverse chronological order
+- 📌 **Pin Items** — Keep important clips always visible
+- 🎛️ **Custom Hotkeys** — Choose your preferred key binding on first launch
+- 🔍 **Instant Search** — Filter items with a built-in search bar
+- 🖥️ **Multi-Display Server** — Works on both X11 and Wayland
+- 🌗 **Themes** — Dark, light, or system theme
+- ⚙️ **Configurable** — Adjust timings, delays, and behavior via settings.json
+- 📋 **Auto-paste** — Optional auto-paste after selecting items (X11: xdotool, Wayland: wtype/ydotool)
+- 🔄 **Smart Cleanup** — Auto-clear on reboot while preserving pinned items
+- 🖼️ **Clean UI** — GNOME-inspired, keyboard-friendly interface  
 
 ---
 
 ## 📦 Dependencies
 
-Install these before running CopyClip:
+**Using the automatic installer?** Skip this section - dependencies are installed automatically.
+
+For manual installation, install these based on your display server:
 
 ### Debian / Ubuntu
 ```bash
-sudo apt install xsel wtype xdotool ydotool python3-xlib python3-pyqt6
+# Required for all systems
+sudo apt install xsel python3-xlib python3-pyqt6
+
+# For X11 only
+sudo apt install xdotool
+
+# For Wayland only (choose one or both)
+sudo apt install wtype        # Recommended
+sudo apt install ydotool      # Alternative
 ```
 
 ### Fedora
 ```bash
-sudo dnf install xsel wtype xdotool ydotool python3-xlib python3-pyqt6
+# Required for all systems
+sudo dnf install xsel python3-xlib python3-pyqt6
+
+# For X11 only
+sudo dnf install xdotool
+
+# For Wayland only
+sudo dnf install wtype ydotool
 ```
 
 ### Arch / Manjaro
 ```bash
-sudo pacman -S xsel wtype xdotool ydotool python-xlib python-pyqt6
+# Required for all systems
+sudo pacman -S xsel python-xlib python-pyqt6
+
+# For X11 only
+sudo pacman -S xdotool
+
+# For Wayland only
+sudo pacman -S wtype ydotool
 ```
 
-> **Note:**  
-> `xsel` → clipboard operations  
-> `xdotool` → auto-paste for X11  
-> `ydotool` → auto-paste for Wayland  
-> `wtype` → auto-paste alternative for Wayland  
-> `python3-xlib` → global hotkeys on X11  
-> `PyQt6` → GUI
+> **Note:**
+> `xsel` → clipboard operations (required)
+> `python3-xlib` → global hotkeys on X11 (required for X11)
+> `PyQt6` → GUI (required)
+> `xdotool` → auto-paste for X11 (optional)
+> `wtype` → auto-paste for Wayland (optional, recommended)
+> `ydotool` → auto-paste for Wayland (optional, alternative)
 
 
 ---
 
 ## 🚀 Installation
 
-### Using **uv** (recommended)
+### Automatic Installation (Recommended)
+Install CopyClip with a single command. The script will:
+- Detect your system and install dependencies
+- Clone the repository to `~/.local/share/copyclip`
+- Set up executables in `~/.local/bin`
+- Configure everything automatically
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Walkercito/CopyClip/main/install.sh | bash
+```
+
+After installation, start CopyClip with:
+```bash
+copyclip
+```
+
+### Manual Installation with uv
 ```bash
 git clone https://github.com/Walkercito/CopyClip.git
 cd CopyClip
@@ -99,7 +141,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv run main.py
 ```
 
-### Using pip
+### Manual Installation with pip
 ```bash
 git clone https://github.com/Walkercito/CopyClip.git
 cd CopyClip
@@ -115,50 +157,61 @@ python3 main.py
 ### ✔️ X11 (Full Support)
 Global hotkeys work automatically.
 
-### ⚠️ Wayland (Partial – testers needed)
-Manual hotkey setup required on GNOME or KDE.
+### ⚠️ Wayland (Requires Manual Hotkey Setup)
+Global hotkeys require manual configuration on Wayland. Auto-paste works with `wtype` or `ydotool`.
 
 **GNOME**
-1. Settings → Keyboard → Custom Shortcuts  
+1. Settings → Keyboard → Custom Shortcuts
 2. Add new:
-   - **Name:** CopyClip  
-   - **Command:** `copyclip-show-ui`  
-   - **Shortcut:** your choice  
+   - **Name:** CopyClip
+   - **Command:** `copyclip-show-ui` (if using automatic installer) or full path to `bin/copyclip-show-ui`
+   - **Shortcut:** your choice (e.g., Ctrl+Alt+V)
 
-**KDE**
-1. System Settings → Shortcuts → Custom Shortcuts  
-2. Add new → Command/URL → `copyclip-show-ui`
+**KDE Plasma**
+1. System Settings → Shortcuts → Custom Shortcuts
+2. Right-click → New → Global Shortcut → Command/URL
+3. Set trigger and command: `copyclip-show-ui`
 
-Or launch UI manually:
+**Launch UI manually:**
 ```bash
+# If installed with automatic installer
+copyclip-show-ui
+
+# If running from source
 uv run bin/show_ui.py
 ```
 
-> If you're on Wayland, please open an issue with your distro/desktop info to help me improve support.
+> **Note:** Wayland support is functional but requires manual hotkey setup. GNOME 48+ will support global shortcuts portal for automatic hotkeys.
 
 ---
 
 ## 🛠️ How to Use
 
 ### First Run
-Choose your preferred hotkey:
-- `Super + V` (default)
+On first launch, choose your preferred hotkey:
+- `Super + V` (default, Windows-like)
 - `Ctrl + Alt + V`
 - `Super + C`
 - `Ctrl + Shift + V`
 
-### Usage
-1. Copy text normally (`Ctrl + C`)
-2. Open CopyClip with your hotkey  
-3. Click to copy items back to clipboard  
-4. Ctrl+Click to pin/unpin  
-5. Use the search bar to filter items  
+You can change this later in Settings.
 
-### Shortcuts
-- **Hotkey** → Open window  
-- **Esc** → Hide window  
-- **Ctrl + Esc** → Quit
-- **Ctrl + Left Click** → Pin / Unpin
+### Daily Usage
+1. **Copy text normally** with `Ctrl + C`
+2. **Open CopyClip** with your configured hotkey
+3. **Click any item** to copy it to clipboard
+4. **Ctrl + Click** to pin/unpin items
+5. **Use the search bar** to filter items
+6. **Access Settings** via the Settings button to configure:
+   - Theme (dark/light/system)
+   - Auto-hide behavior
+   - Auto-paste (experimental)
+
+### Keyboard Shortcuts
+- **Your Hotkey** → Open CopyClip window
+- **Esc** → Hide window
+- **Ctrl + Esc** → Quit application
+- **Ctrl + Left Click** → Pin/Unpin items
 
 ---
 
@@ -173,28 +226,28 @@ Choose your preferred hotkey:
 Example settings:
 ```json
 {
-    # UI preferences
-    "theme": "dark",
-    "hotkey": "super_v",
-    "first_run_completed": False,
-
-    # Behavior settings
-    "auto_hide_on_copy": True,
-    "auto_paste_on_copy": False,
-
-    # Timing settings (in milliseconds)
-    "clipboard_check_interval": 1000,  # Check clipboard every 1 second
-    "clipboard_auto_hide_delay": 800,  # Auto-hide delay after copy
-    "auto_paste_delay": 200,  # Delay before auto-paste for focus restoration
-
-    # Display settings
-    "max_chars_display": 100,  # Maximum characters to display before truncation
-    # Environment cache (detected once and cached)
-
-    "window_manager": None,  # Auto-detected: "x11" or "wayland"
-    "paste_tool": None,  # Auto-detected: "xdotool", "wtype", or "ydotool"
+  "theme": "dark",
+  "hotkey": "super_v",
+  "first_run_completed": false,
+  "auto_hide_on_copy": true,
+  "auto_paste_on_copy": false,
+  "clipboard_check_interval": 1000,
+  "clipboard_auto_hide_delay": 800,
+  "auto_paste_delay": 200,
+  "max_chars_display": 100,
+  "window_manager": null,
+  "paste_tool": null
 }
 ```
+
+**Configurable settings:**
+- `theme`: "dark", "light", or "system"
+- `hotkey`: Hotkey preset name
+- `clipboard_check_interval`: Check clipboard every N milliseconds (default: 1000)
+- `clipboard_auto_hide_delay`: Auto-hide delay after copy in ms (default: 800)
+- `auto_paste_delay`: Delay before auto-paste in ms (default: 200)
+- `max_chars_display`: Max characters before truncation (default: 100)
+- `window_manager`, `paste_tool`: Auto-detected and cached on first run
 
 ---
 
