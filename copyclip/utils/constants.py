@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "CopyClip"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.4"
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
