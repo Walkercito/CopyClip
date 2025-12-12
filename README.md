@@ -1,5 +1,5 @@
 <div align="center">
-  
+
 # 📋 CopyClip
 
 </div>
@@ -23,7 +23,9 @@
 
 - 🗂️ **Clipboard History**: Keep track of all copied items in reverse chronological order.
 - 📌 **Pin Important Items**: Save crucial snippets by pinning them to the top of your clipboard history.
-- 🎛️ **Customizable Shortcuts**: Easily configure shortcuts for quick access and management.
+- 🎛️ **Customizable Hotkeys**: Choose from multiple hotkey presets on first run.
+- 🖥️ **X11 Support**: Full global hotkey support on X11 sessions.
+- 🔍 **Search**: Quickly filter clipboard items with the built-in search bar.
 - 🔄 **Auto-clear on Reboot**: Automatically clear your clipboard history when you restart your computer (with an option to pin items to prevent deletion).
 - 🖼️ **Simple UI**: Access your clipboard history through a clean and user-friendly interface.
 - 🎨 **Multiple Themes**: Choose between dark, light, or system themes.
@@ -34,86 +36,172 @@
 
 ### Debian/Ubuntu
 ```bash
-sudo apt-get install xsel python3-xlib python3-pyqt6 python3-pip
+sudo apt-get install xsel python3-xlib python3-pyqt6
 ```
 
 ### Fedora
 ```bash
-sudo dnf install xsel python3-xlib python3-pyqt6 python3-pip
+sudo dnf install xsel python3-xlib python3-pyqt6
 ```
 
 ### Arch/Manjaro
 ```bash
-sudo pacman -S xsel python-xlib python-pyqt6 python-pip
+sudo pacman -S xsel python-xlib python-pyqt6
 ```
 
-> [!NOTE]  
+> [!NOTE]
 > These dependencies are required for clipboard operations (`xsel`), hotkey detection (`python3-xlib`), and the graphical interface (`python3-pyqt6`). If the app fails to start, verify they're installed correctly.
+
+> [!IMPORTANT]
+> **X11 vs Wayland**: Global hotkeys work fully on **X11** sessions. On **Wayland**, you'll need to configure the hotkey manually in your system settings (see Wayland Setup below).
 
 ## 🚀 Installation
 
-### Option 1: Download Pre-compiled Binary (Recommended)
+### Using uv (Recommended)
 
-1. Go to the [Releases](https://github.com/Walkercito/CopyClip/releases) page
-2. Download the latest `CopyClip` binary for your system
-3. Make it executable:
-   ```bash
-   chmod +x CopyClip
-   ```
-4. Run the application:
-   ```bash
-   ./CopyClip
-   ```
+The project uses [uv](https://docs.astral.sh/uv/) for dependency management:
 
-### Option 2: Build from Source
-
-#### Step 1: Clone the repository
 ```bash
+# Clone the repository
 git clone https://github.com/Walkercito/CopyClip.git
 cd CopyClip
+
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Run the application
+uv run main.py
 ```
 
-#### Step 2: Install Python dependencies
-```bash
-pip3 install PyQt6 Pillow Xlib
-```
+### Traditional Installation
 
-#### Step 3: Run from source
 ```bash
+# Clone the repository
+git clone https://github.com/Walkercito/CopyClip.git
+cd CopyClip
+
+# Install Python dependencies
+pip3 install PyQt6 python-xlib
+
+# Run the application
 python3 main.py
-```
-
-#### Step 4: (Optional) Create your own executable
-If you want to create your own standalone executable:
-
-```bash
-# Install PyInstaller
-pip3 install pyinstaller
-
-# Create the executable
-pyinstaller --onefile --windowed --name=CopyClip main.py
-
-# The executable will be in the dist/ folder
-cd dist/
-./CopyClip
 ```
 
 ## 🛠️ How to Use
 
-1. **Launch CopyClip** using one of the installation methods above.
-2. **Copy text** as usual using `Ctrl + C`.
-3. **Open the CopyClip UI** using the default shortcut `Super + V` (Windows key + V).
+### First Run
+
+On first launch, you'll be prompted to select your preferred global hotkey:
+- **Super+V** (Windows key + V) - Default, Windows-like
+- **Ctrl+Alt+V** - Alternative if Super is in use
+- **Super+C** - Alternative with C key
+- **Ctrl+Shift+V** - Alternative with Shift modifier
+
+### Basic Usage
+
+1. **Launch CopyClip** using `uv run main.py` or `python3 main.py`
+2. **Copy text** as usual using `Ctrl + C`
+3. **Open the CopyClip UI** using your configured hotkey (default: `Super + V`)
 4. **Navigate your clipboard history**:
    - **Left Click**: Copy item to clipboard
-   - **Ctrl + Left Click**: Toggle pin status
+   - **Ctrl + Click**: Toggle pin status
    - **Search**: Use the search bar to filter items
-5. **Use the copied content** with `Ctrl + V` in any application.
+5. **Use the copied content** with `Ctrl + V` in any application
 
 ### Keyboard Shortcuts
 
-- `Super + V`: Open/Show CopyClip window
+- `Your Hotkey`: Open/Show CopyClip window (configurable on first run)
 - `Esc`: Hide CopyClip window (when visible)
 - `Ctrl + Esc`: Terminate application (when window is visible)
+
+## 🖥️ Display Server Support
+
+### X11 (Full Support)
+Global hotkeys work automatically on X11 sessions. The application will detect keypresses system-wide.
+
+### Wayland (Manual Setup Required)
+
+On Wayland, you need to configure the global hotkey manually in your system settings:
+
+**GNOME:**
+1. Open Settings → Keyboard → View and Customize Shortcuts
+2. Scroll to bottom and click "Custom Shortcuts"
+3. Click the "+" button
+4. Set:
+   - **Name**: `CopyClip`
+   - **Command**: `copyclip-show-ui`
+   - **Shortcut**: Your preferred key combination (e.g., Ctrl+Alt+V)
+
+**KDE Plasma:**
+1. Open System Settings → Shortcuts → Custom Shortcuts
+2. Edit → New → Global Shortcut → Command/URL
+3. Set your preferred trigger and command: `copyclip-show-ui`
+
+> [!NOTE]
+> Make sure `~/.local/bin` is in your PATH for the `copyclip-show-ui` command to work. The script `copyclip-show-ui` is automatically created in the project directory.
+
+Alternatively, you can run the UI manually:
+```bash
+uv run bin/show_ui.py
+```
+
+## 🔧 Configuration
+
+CopyClip stores its configuration and history in:
+- **Configuration**: `~/.local/share/clipboard-manager/settings.json`
+- **History**: `~/.local/share/clipboard-manager/clipboard_history.json`
+
+### Settings
+
+You can customize CopyClip through the Settings dialog (accessible from the main window) or by editing the settings file directly:
+
+```json
+{
+    "theme": "dark",
+    "window_pinned": false,
+    "hotkey": "super_v",
+    "first_run_completed": true
+}
+```
+
+**Available settings:**
+- **theme**: `dark`, `light`, or `system`
+- **window_pinned**: `true` or `false` (keeps window always on top)
+- **hotkey**: `super_v`, `ctrl_alt_v`, `super_c`, or `ctrl_shift_v`
+
+## 📁 Project Structure
+
+```
+CopyClip/
+├── copyclip/               # Main package
+│   ├── core/              # Core functionality
+│   │   ├── clipboard.py   # Clipboard operations
+│   │   ├── history.py     # History management
+│   │   └── settings.py    # Settings management
+│   ├── hotkeys/           # Hotkey system
+│   │   ├── backend_base.py    # Abstract backend
+│   │   ├── backend_x11.py     # X11 implementation
+│   │   ├── backend_wayland.py # Wayland support
+│   │   ├── config.py          # Hotkey configuration
+│   │   └── manager.py         # Auto-detection manager
+│   ├── ui/                # User interface
+│   │   ├── widgets/       # UI components
+│   │   ├── dialogs/       # Dialogs (FirstRun, Settings)
+│   │   ├── styles/        # Theme management
+│   │   └── main_window.py # Main application window
+│   └── utils/             # Utilities
+│       ├── constants.py   # Application constants
+│       └── environment.py # Environment detection
+├── bin/                   # Executable scripts
+│   ├── show_ui.py         # Manual UI launcher
+│   └── copyclip-show-ui   # Standalone launcher for system hotkeys
+├── scripts/               # Helper scripts (Wayland setup)
+│   ├── ico.py             # Icon generator
+│   ├── install_hotkey.sh  # GNOME hotkey installer
+│   ├── register_hotkey.sh # Hotkey registration helper
+│   └── uninstall_hotkey.sh # Hotkey uninstaller
+└── main.py                # Application entry point
+```
 
 ## 💖 Support the Project
 
@@ -123,7 +211,7 @@ If you find CopyClip useful, consider supporting its development:
   <a href="https://ko-fi.com/T6T018BZDZ" target="_blank">
     <img src="https://img.shields.io/badge/Support%20me%20on-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support Me on Ko-fi">
   </a>
-  
+
   <a href="https://www.paypal.me/KarlaMejiasArian" target="_blank">
     <img src="https://img.shields.io/badge/Donate-PayPal-0079C1?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate with PayPal">
   </a>
@@ -147,66 +235,73 @@ If you find CopyClip useful, consider supporting its development:
   </div>
 </details>
 
-## 🔧 Configuration
-
-CopyClip stores its configuration and history in:
-- **Configuration**: `~/.local/share/clipboard-manager/settings.json`
-- **History**: `~/.local/share/clipboard-manager/clipboard_history.json`
-
-### Settings
-
-You can customize CopyClip through the Settings dialog (accessible from the main window) or by editing the settings file directly:
-
-```json
-{
-    "theme": "dark",
-    "window_pinned": false
-}
-```
-
-Available themes: `dark`, `light`, `system`
-
 ## 🤝 Contributing
 
 We welcome contributions! Here's how you can get involved:
 
-- 🍴 Fork the repository.
-- 🌿 Create a new branch (`git checkout -b feature-branch`).
-- 🛠️ Make your changes.
-- 💾 Commit your changes (`git commit -m 'Add new feature'`).
-- 🚀 Push to the branch (`git push origin feature-branch`).
-- 🔁 Open a pull request.
+- 🍴 Fork the repository
+- 🌿 Create a new branch (`git checkout -b feature-branch`)
+- 🛠️ Make your changes
+- 💾 Commit your changes (`git commit -m 'Add new feature'`)
+- 🚀 Push to the branch (`git push origin feature-branch`)
+- 🔁 Open a pull request
+
+### Development
+
+The project uses:
+- **uv** for dependency management
+- **ruff** for linting and formatting
+- **pre-commit** hooks for code quality
+
+```bash
+# Install dependencies
+uv sync
+
+# Run linting
+uv run ruff check .
+
+# Run formatting
+uv run ruff format .
+
+# Install pre-commit hooks
+uv run pre-commit install
+```
+
+See [CLAUDE.md](CLAUDE.md) for detailed development documentation.
 
 ## 🗺️ Roadmap
 
-- 🛠️ **Bug Fix**: Integrate clipboard entries directly with `Ctrl + V` functionality. <span style="color:green"><b>[FIXED]</b></span>
-- 💻 **UI Improvements**: Enhance UI to provide a Windows 11-like experience. <span style="color:green"><b>[FIXED]</b></span>
-- ⚠️ **Bug Fix**: Text overflows screen when pressing "show more" button. <span style="color:orange"><b>[IN PROGRESS]</b></span>
-- ✒️ **Feature**: Add support for rich text and image copying.
-- 🌐 **Feature**: Cross-platform support for Windows and macOS.
-- 🔧 **Feature**: Configurable hotkeys.
-- 🔒 **Feature**: Optional encryption for sensitive clipboard data.
+- ✅ **Bug Fix**: Integrate clipboard entries directly with `Ctrl + V` functionality
+- ✅ **UI Improvements**: Enhance UI to provide a Windows 11-like experience
+- ✅ **Feature**: Configurable hotkeys with multiple presets
+- ✅ **Feature**: First-run setup wizard for hotkey selection
+- ✅ **Architecture**: Modular, well-organized codebase with proper typing
+- ⏳ **Feature**: Full Wayland global hotkey support (requires GNOME 48+)
+- ⏳ **Bug Fix**: Text overflow when pressing "show more" button
+- 📋 **Feature**: Add support for rich text and image copying
+- 🌐 **Feature**: Cross-platform support for Windows and macOS
+- 🔒 **Feature**: Optional encryption for sensitive clipboard data
 
 ## 📄 License
 
 <div align="center">
-  
+
   This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-  
+
 </div>
 
 ## 💬 Contact
 
 <div align="center">
-  
+
   If you encounter any issues or have suggestions, feel free to open an issue or reach out via [GitHub](https://github.com/Walkercito/CopyClip).
-  
+
 </div>
 
 ---
 
 <div align="center">
-  
+
   We hope **CopyClip** helps make your clipboard management easier! ✨
-  
+
 </div>

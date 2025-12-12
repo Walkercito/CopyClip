@@ -1,0 +1,41 @@
+[project]
+name = "copyclip"
+version = "0.1.0"
+description = "A clipboard manager for Linux with customizable hotkeys"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyqt6>=6.10.1",
+    "python-xlib>=0.33",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.0",
+    "pyrefly>=0.45.2",
+    "ruff>=0.14.8",
+]
+
+[tool.ruff]
+# Line length
+line-length = 100
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+# Enable pycodestyle (E, W), pyflakes (F), isort (I), and type checking (UP)
+select = ["E", "F", "I", "UP", "B", "SIM", "PL"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["code"]
