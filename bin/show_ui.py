@@ -9,10 +9,19 @@ from copyclip.core.clipboard import ClipboardManager
 from copyclip.core.history import HistoryManager
 from copyclip.core.settings import SettingsManager
 from copyclip.ui.main_window import MainWindow
+from copyclip.utils.single_instance import SingleInstance
 
 
 def main():
     """Show the CopyClip UI."""
+    single_instance = SingleInstance()
+    if single_instance.is_running():
+        single_instance.signal_show_window()
+        sys.exit(0)
+
+    if not single_instance.acquire_lock():
+        sys.exit(1)
+
     app = QApplication(sys.argv)
 
     clipboard_manager = ClipboardManager()

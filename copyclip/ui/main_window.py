@@ -38,6 +38,7 @@ from copyclip.utils.constants import (
     FeedbackType,
     Theme,
 )
+from copyclip.utils.single_instance import SingleInstance
 
 if TYPE_CHECKING:
     from copyclip.core.history import HistoryManager
@@ -66,9 +67,9 @@ class MainWindow(QMainWindow):
         self.history_manager = history_manager
         self.settings_manager = settings_manager
         self.hotkey_manager = None  # Will be set by main.py
+        self.single_instance = SingleInstance()
 
         # Window state
-        self.window_pinned = False
         self._force_quit = False
 
         # UI components
@@ -86,6 +87,7 @@ class MainWindow(QMainWindow):
 
         # Start clipboard monitoring
         self._start_clipboard_timer()
+        self._start_signal_timer()
 
         self.hide()
 
@@ -121,50 +123,110 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        main_layout.addWidget(self._create_search_frame())
-        main_layout.addWidget(self._create_clips_scroll_area(), 1)
-        main_layout.addWidget(self._create_instructions_label())
-        main_layout.addWidget(self._create_button_frame())
+        main_layout.addWidget(self._create_header_bar())
+
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.setSpacing(12)
+
+        content_layout.addWidget(self._create_search_section())
+        content_layout.addWidget(self._create_clips_section(), 1)
+        content_layout.addWidget(self._create_footer_section())
+
+        main_layout.addWidget(content_widget)
 
         theme = self.settings_manager.get("theme", Theme.DARK)
         self.apply_theme(theme)
 
-    def _create_search_frame(self) -> QFrame:
-        """Create the search input frame.
+    def _create_header_bar(self) -> QFrame:
+        """Create the header bar with title and actions.
 
         Returns:
-            Search frame widget
+            Header bar widget
         """
-        search_frame = QFrame()
-        search_layout = QHBoxLayout(search_frame)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(5)
+        header = QFrame()
+        header.setObjectName("headerBar")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 12, 16, 12)
+        header_layout.setSpacing(12)
 
+        # Title
+        title_label = QLabel(APP_NAME)
+        title_label.setObjectName("headerTitle")
+        header_layout.addWidget(title_label)
+
+        header_layout.addStretch(1)
+
+        # Actions
+        settings_btn = QPushButton("Settings")
+        settings_btn.setToolTip("Open application settings")
+        settings_btn.setObjectName("headerButton")
+        settings_btn.clicked.connect(self.show_settings)
+        header_layout.addWidget(settings_btn)
+
+        kill_btn = QPushButton("Quit")
+        kill_btn.setToolTip("Close CopyClip completely")
+        kill_btn.setObjectName("killButton")
+        kill_btn.clicked.connect(self._kill_application)
+        header_layout.addWidget(kill_btn)
+
+        return header
+
+    def _create_search_section(self) -> QFrame:
+        """Create the search section with label.
+
+        Returns:
+            Search section widget
+        """
+        section = QFrame()
+        section_layout = QVBoxLayout(section)
+        section_layout.setContentsMargins(0, 0, 0, 0)
+        section_layout.setSpacing(8)
+
+        # Search input
         self.search_entry = QLineEdit()
-        self.search_entry.setPlaceholderText("Search clips...")
+        self.search_entry.setPlaceholderText("Search clipboard history...")
         self.search_entry.textChanged.connect(self._filter_clips)
         self.search_entry.setObjectName("searchEntry")
+        section_layout.addWidget(self.search_entry)
 
-        clear_button = QPushButton("×")
-        clear_button.setFixedSize(28, 28)
-        clear_button.setToolTip("Clear search")
-        clear_button.setObjectName("clearSearchButton")
-        clear_button.clicked.connect(self.search_entry.clear)
+        return section
 
-        search_layout.addWidget(self.search_entry)
-        search_layout.addWidget(clear_button)
-
-        return search_frame
-
-    def _create_clips_scroll_area(self) -> QScrollArea:
-        """Create the clips scroll area.
+    def _create_clips_section(self) -> QFrame:
+        """Create the clips section with history items.
 
         Returns:
-            Scroll area widget
+            Clips section widget
         """
+        section = QFrame()
+        section.setObjectName("clipsSection")
+        section_layout = QVBoxLayout(section)
+        section_layout.setContentsMargins(0, 0, 0, 0)
+        section_layout.setSpacing(8)
+
+        # Section header
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+
+        clips_title = QLabel("History")
+        clips_title.setObjectName("sectionTitle")
+        header_layout.addWidget(clips_title)
+
+        header_layout.addStretch(1)
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.setToolTip("Remove all non-pinned items")
+        clear_btn.setObjectName("secondaryButton")
+        clear_btn.clicked.connect(self._clear_history)
+        header_layout.addWidget(clear_btn)
+
+        section_layout.addLayout(header_layout)
+
+        # Scroll area
         self.clips_scroll_area = QScrollArea()
         self.clips_scroll_area.setWidgetResizable(True)
         self.clips_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -179,81 +241,66 @@ class MainWindow(QMainWindow):
         self.clips_layout = QVBoxLayout(self.clips_content_widget)
         self.clips_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.clips_layout.setSpacing(6)
-        self.clips_layout.setContentsMargins(5, 5, 5, 5)
+        self.clips_layout.setContentsMargins(0, 0, 0, 0)
 
         # Add status labels
-        self.empty_label = QLabel("Clipboard history is empty.")
+        self.empty_label = QLabel("No clipboard history yet\nCopy something to get started")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setObjectName("emptyHistoryLabel")
         self.empty_label.setWordWrap(True)
         self.clips_layout.addWidget(self.empty_label)
         self.empty_label.hide()
 
-        self.no_results_label = QLabel("No results found matching your search.")
+        self.no_results_label = QLabel("No results found")
         self.no_results_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.no_results_label.setObjectName("noResultsLabel")
         self.no_results_label.setWordWrap(True)
         self.clips_layout.addWidget(self.no_results_label)
         self.no_results_label.hide()
 
-        return self.clips_scroll_area
+        section_layout.addWidget(self.clips_scroll_area, 1)
 
-    def _create_instructions_label(self) -> QLabel:
-        """Create the instructions label.
+        return section
+
+    def _create_footer_section(self) -> QFrame:
+        """Create the footer section with instructions.
 
         Returns:
-            Instructions label widget
+            Footer section widget
         """
-        instructions = QLabel("Left Click: Copy | Ctrl+Click: Toggle Pin")
+        footer = QFrame()
+        footer.setObjectName("footer")
+        footer_layout = QVBoxLayout(footer)
+        footer_layout.setContentsMargins(0, 8, 0, 0)
+        footer_layout.setSpacing(4)
+
+        instructions = QLabel("Left Click to copy • Ctrl+Click to pin")
         instructions.setAlignment(Qt.AlignmentFlag.AlignCenter)
         instructions.setObjectName("instructionsLabel")
-        return instructions
+        footer_layout.addWidget(instructions)
 
-    def _create_button_frame(self) -> QFrame:
-        """Create the button frame.
-
-        Returns:
-            Button frame widget
-        """
-        button_frame = QFrame()
-        button_layout = QHBoxLayout(button_frame)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(10)
-
-        clear_btn = QPushButton("Clear History")
-        clear_btn.setToolTip("Remove all non-pinned items")
-        clear_btn.clicked.connect(self._clear_history)
-
-        settings_btn = QPushButton("Settings")
-        settings_btn.setToolTip("Open application settings")
-        settings_btn.clicked.connect(self.show_settings)
-
-        self.pin_button = QPushButton("Pin Window")
-        self.pin_button.setToolTip("Keep window on top and open")
-        self.pin_button.setCheckable(True)
-        self.pin_button.toggled.connect(self._toggle_pin)
-
-        button_layout.addStretch(1)
-        button_layout.addWidget(clear_btn)
-        button_layout.addWidget(settings_btn)
-        button_layout.addWidget(self.pin_button)
-        button_layout.addStretch(1)
-
-        return button_frame
+        return footer
 
     def _apply_saved_state(self) -> None:
         """Apply saved window state from settings."""
-        is_pinned = self.settings_manager.get("window_pinned", False)
-        self.window_pinned = is_pinned
-        self.pin_button.setChecked(is_pinned)
-        self.pin_button.setText("Unpin Window" if is_pinned else "Pin Window")
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, is_pinned)
 
     def _start_clipboard_timer(self) -> None:
         """Start the clipboard monitoring timer."""
         self.clipboard_timer = QTimer(self)
         self.clipboard_timer.timeout.connect(self._check_clipboard_updates)
         self.clipboard_timer.start(CLIPBOARD_CHECK_INTERVAL)
+
+    def _start_signal_timer(self) -> None:
+        """Start the signal monitoring timer for single instance."""
+        self.signal_timer = QTimer(self)
+        self.signal_timer.timeout.connect(self._check_show_signal)
+        self.signal_timer.start(500)  # Check every 500ms
+
+    @pyqtSlot()
+    def _check_show_signal(self) -> None:
+        """Check for signal to show window from another instance."""
+        if self.single_instance.check_show_signal():
+            self.show_clipboard()
 
     @pyqtSlot()
     def _check_clipboard_updates(self) -> None:
@@ -387,7 +434,10 @@ class MainWindow(QMainWindow):
             return False
 
     def show_feedback(
-        self, message: str, type_: str = FeedbackType.INFO, duration: int = FEEDBACK_DURATION
+        self,
+        message: str,
+        type_: str = FeedbackType.INFO,
+        duration: int = FEEDBACK_DURATION,
     ) -> None:
         """Display a temporary feedback message.
 
@@ -463,31 +513,11 @@ class MainWindow(QMainWindow):
                 print(f"Error clearing history: {e}")
                 self.show_feedback("Error clearing history", FeedbackType.ERROR)
 
-    @pyqtSlot(bool)
-    def _toggle_pin(self, checked: bool) -> None:
-        """Toggle window pin state.
-
-        Args:
-            checked: New pin state
-        """
-        try:
-            self.window_pinned = checked
-            flags = self.windowFlags()
-
-            if self.window_pinned:
-                self.setWindowFlags(flags | Qt.WindowType.WindowStaysOnTopHint)
-                self.pin_button.setText("Unpin Window")
-            else:
-                self.setWindowFlags(flags & ~Qt.WindowType.WindowStaysOnTopHint)
-                self.pin_button.setText("Pin Window")
-
-            self.show()
-            self.settings_manager.set("window_pinned", self.window_pinned)
-            self.settings_manager.save()
-        except Exception as e:
-            print(f"Error in toggle_pin: {e}")
-            # Revert state
-            self.pin_button.setChecked(not checked)
+    @pyqtSlot()
+    def _kill_application(self) -> None:
+        """Terminate the application completely."""
+        self._force_quit = True
+        QApplication.instance().quit()
 
     def show_clipboard(self) -> None:
         """Show the clipboard window."""
@@ -499,10 +529,9 @@ class MainWindow(QMainWindow):
         self.search_entry.setFocus()
 
     def hide_clipboard(self) -> None:
-        """Hide the clipboard window if not pinned."""
-        if not self.window_pinned:
-            self.hide()
-            self.search_entry.clear()
+        """Hide the clipboard window."""
+        self.hide()
+        self.search_entry.clear()
 
     def apply_theme(self, theme: str) -> None:
         """Apply a visual theme.
@@ -539,12 +568,9 @@ class MainWindow(QMainWindow):
             event: Close event
         """
         if self._force_quit:
+            self.single_instance.release_lock()
             event.accept()
             return
 
-        if self.window_pinned:
-            event.ignore()
-            self.show_feedback("Window is pinned. Unpin to close.", FeedbackType.WARNING, 2500)
-        else:
-            event.ignore()
-            self.hide_clipboard()
+        event.ignore()
+        self.hide_clipboard()

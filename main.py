@@ -11,10 +11,22 @@ from copyclip.core.settings import SettingsManager
 from copyclip.hotkeys.manager import HotkeyManager
 from copyclip.ui.dialogs import FirstRunDialog
 from copyclip.ui.main_window import MainWindow
+from copyclip.utils.single_instance import SingleInstance
 
 
-def main():
+def main():  # noqa PLR0915
     """Main entry point for CopyClip."""
+    single_instance = SingleInstance()
+    if single_instance.is_running():
+        print("CopyClip is already running. Showing existing window...")
+        single_instance.signal_show_window()
+        sys.exit(0)
+
+    # Acquire lock for this instance
+    if not single_instance.acquire_lock():
+        print("Failed to acquire instance lock. Exiting.")
+        sys.exit(1)
+
     app = QApplication(sys.argv)
 
     # Initialize managers
@@ -65,6 +77,7 @@ def main():
         print("\nShutting down CopyClip...")
         if hotkey_manager:
             hotkey_manager.stop_listening()
+        single_instance.release_lock()
         app.quit()
 
     signal.signal(signal.SIGINT, signal_handler)

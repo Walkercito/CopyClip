@@ -1,5 +1,7 @@
 """Theme management and stylesheets for the application."""
 
+import subprocess
+
 from copyclip.utils.constants import Theme
 
 
@@ -51,12 +53,40 @@ class ThemeManager:
             QMainWindow, QWidget {{
                 background-color: #1e1e1e; color: #e0e0e0;
             }}
+            QFrame#headerBar {{
+                background-color: #2d2d2d;
+                border-bottom: 1px solid #3d3d3d;
+            }}
+            QLabel#headerTitle {{
+                font-size: 12pt; font-weight: bold; color: #e0e0e0;
+            }}
+            QLabel#sectionTitle {{
+                font-size: 10pt; font-weight: 600; color: #b0b0b0;
+                padding-bottom: 4px;
+            }}
             QPushButton {{
                 background-color: #007bff; color: #ffffff; border: none;
-                padding: 6px 12px; border-radius: 4px; font-weight: normal;
+                padding: 6px 16px; border-radius: 4px; font-weight: normal;
             }}
             QPushButton:hover {{ background-color: #0056b3; }}
             QPushButton:pressed {{ background-color: #004085; }}
+            QPushButton#headerButton {{
+                background-color: #3a3a3a; color: #e0e0e0;
+                padding: 6px 12px;
+            }}
+            QPushButton#headerButton:hover {{ background-color: #4a4a4a; }}
+            QPushButton#headerButton:pressed {{ background-color: #2a2a2a; }}
+            QPushButton#killButton {{
+                background-color: #dc3545; color: #ffffff;
+                padding: 6px 12px;
+            }}
+            QPushButton#killButton:hover {{ background-color: #c82333; }}
+            QPushButton#killButton:pressed {{ background-color: #bd2130; }}
+            QPushButton#secondaryButton {{
+                background-color: #3a3a3a; color: #e0e0e0;
+                padding: 4px 12px; font-size: 9pt;
+            }}
+            QPushButton#secondaryButton:hover {{ background-color: #4a4a4a; }}
             QPushButton#clearSearchButton {{
                 background-color: #4e4e4e; color: #cccccc; font-weight: bold;
                 padding: 0px; border-radius: 14px;
@@ -109,6 +139,20 @@ class ThemeManager:
             }}
             QDialog {{ background-color: #1e1e1e; color: #e0e0e0; }}
             QRadioButton {{ color: #e0e0e0; }}
+            QFrame#selectionContainer {{
+                background-color: #252526;
+                border: 1px solid #3d3d3d;
+                border-radius: 6px;
+            }}
+            QLabel#subtitleLabel {{
+                color: #b0b0b0; font-size: 10pt;
+            }}
+            QLabel#instructionLabel {{
+                color: #e0e0e0; font-size: 10pt; font-weight: 600;
+            }}
+            QLabel#noteLabel {{
+                color: #888888;
+            }}
             {cls.TOGGLE_LABEL.format(color="#58a6ff")}
         """
 
@@ -121,12 +165,40 @@ class ThemeManager:
         """
         return f"""
             QMainWindow, QWidget {{ background-color: #f8f9fa; color: #212529; }}
+            QFrame#headerBar {{
+                background-color: #ffffff;
+                border-bottom: 1px solid #dee2e6;
+            }}
+            QLabel#headerTitle {{
+                font-size: 12pt; font-weight: bold; color: #212529;
+            }}
+            QLabel#sectionTitle {{
+                font-size: 10pt; font-weight: 600; color: #6c757d;
+                padding-bottom: 4px;
+            }}
             QPushButton {{
                 background-color: #007bff; color: #ffffff; border: none;
-                padding: 6px 12px; border-radius: 4px; font-weight: normal;
+                padding: 6px 16px; border-radius: 4px; font-weight: normal;
             }}
             QPushButton:hover {{ background-color: #0056b3; }}
             QPushButton:pressed {{ background-color: #004085; }}
+            QPushButton#headerButton {{
+                background-color: #e9ecef; color: #212529;
+                padding: 6px 12px;
+            }}
+            QPushButton#headerButton:hover {{ background-color: #dee2e6; }}
+            QPushButton#headerButton:pressed {{ background-color: #ced4da; }}
+            QPushButton#killButton {{
+                background-color: #dc3545; color: #ffffff;
+                padding: 6px 12px;
+            }}
+            QPushButton#killButton:hover {{ background-color: #c82333; }}
+            QPushButton#killButton:pressed {{ background-color: #bd2130; }}
+            QPushButton#secondaryButton {{
+                background-color: #e9ecef; color: #212529;
+                padding: 4px 12px; font-size: 9pt;
+            }}
+            QPushButton#secondaryButton:hover {{ background-color: #dee2e6; }}
             QPushButton#clearSearchButton {{
                 background-color: #d0d0d0; color: #333333; font-weight: bold;
                 padding: 0px; border-radius: 14px;
@@ -180,32 +252,82 @@ class ThemeManager:
             }}
             QDialog {{ background-color: #f8f9fa; color: #212529; }}
             QRadioButton {{ color: #212529; }}
+            QFrame#selectionContainer {{
+                background-color: #ffffff;
+                border: 1px solid #dee2e6;
+                border-radius: 6px;
+            }}
+            QLabel#subtitleLabel {{
+                color: #6c757d; font-size: 10pt;
+            }}
+            QLabel#instructionLabel {{
+                color: #212529; font-size: 10pt; font-weight: 600;
+            }}
+            QLabel#noteLabel {{
+                color: #6c757d;
+            }}
             {cls.TOGGLE_LABEL.format(color="#007bff")}
         """
 
     @classmethod
+    def _detect_system_theme_preference(cls) -> str:
+        """Detect if system prefers dark or light theme.
+
+        Returns:
+            'dark' or 'light' based on system preference
+        """
+        try:
+            # Try to get GNOME color scheme preference
+            result = subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if result.returncode == 0:
+                scheme = result.stdout.strip().strip("'\"")
+                if "dark" in scheme.lower():
+                    return Theme.DARK
+                elif "light" in scheme.lower():
+                    return Theme.LIGHT
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        try:
+            # Fallback: check GTK theme name
+            result = subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if result.returncode == 0:
+                theme_name = result.stdout.strip().strip("'\"").lower()
+                if "dark" in theme_name:
+                    return Theme.DARK
+                elif "light" in theme_name:
+                    return Theme.LIGHT
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        # Default to dark if unable to detect
+        return Theme.DARK
+
+    @classmethod
     def get_system_theme(cls) -> str:
-        """Get the system theme stylesheet (minimal styling).
+        """Get the system theme stylesheet (auto-detects dark/light preference).
 
         Returns:
             System theme stylesheet string
         """
-        return (
-            cls.SCROLLBAR_HIDDEN
-            + cls.TOGGLE_LABEL.format(color="#007bff")
-            + """
-            QFrame#clipFrame QLabel#contentLabel {
-                padding: 3px 5px;
-                border-radius: 3px;
-            }
-            QFrame#clipFrame QLabel#timeLabel {
-                padding: 2px 0px;
-            }
-            QFrame#clipFrame QLabel#pinIndicator {
-                font-weight: bold; padding-right: 5px;
-            }
-        """
-        )
+        # Detect system preference and use corresponding theme
+        preferred_theme = cls._detect_system_theme_preference()
+        if preferred_theme == Theme.DARK:
+            return cls.get_dark_theme()
+        else:
+            return cls.get_light_theme()
 
     @classmethod
     def get_theme_stylesheet(cls, theme: str) -> str:

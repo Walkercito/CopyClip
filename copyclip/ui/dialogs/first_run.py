@@ -5,6 +5,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -36,35 +37,46 @@ class FirstRunDialog(QDialog):
         self.selected_preset = "super_v"  # Default
         self._setup_ui()
 
-    def _setup_ui(self) -> None:
+    def _setup_ui(self) -> None:  # noqa PLR0915
         """Setup the dialog UI."""
         self.setWindowTitle("Welcome to CopyClip")
         self.setModal(True)
-        self.setMinimumWidth(450)
+        self.setMinimumWidth(500)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(20)
 
-        # Welcome message
+        # Welcome message (title)
         welcome_label = QLabel("Welcome to CopyClip!")
         welcome_font = QFont()
-        welcome_font.setPointSize(14)
+        welcome_font.setPointSize(16)
         welcome_font.setBold(True)
         welcome_label.setFont(welcome_font)
         welcome_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(welcome_label)
 
-        # Description
-        desc_label = QLabel(
-            "CopyClip is a clipboard manager that helps you manage your clipboard history.\n\n"
-            "Please select a keyboard shortcut to open the clipboard window:"
-        )
+        # Description (subtitle)
+        desc_label = QLabel("A clipboard manager that helps you manage your clipboard history")
         desc_label.setWordWrap(True)
         desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc_label.setObjectName("subtitleLabel")
         layout.addWidget(desc_label)
 
-        # Hotkey selection radio buttons
+        selection_container = QFrame()
+        selection_container.setObjectName("selectionContainer")
+        selection_container.setFrameShape(QFrame.Shape.Box)
+        selection_container.setLineWidth(1)
+
+        container_layout = QVBoxLayout(selection_container)
+        container_layout.setContentsMargins(20, 16, 20, 16)
+        container_layout.setSpacing(12)
+
+        instruction_label = QLabel("Please select a keyboard shortcut to open the clipboard:")
+        instruction_label.setWordWrap(True)
+        instruction_label.setObjectName("instructionLabel")
+        container_layout.addWidget(instruction_label)
+
         hotkey_group = QButtonGroup(self)
         self.radio_buttons = {}
 
@@ -79,18 +91,21 @@ class FirstRunDialog(QDialog):
 
             self.radio_buttons[preset_name] = radio
             hotkey_group.addButton(radio)
-            layout.addWidget(radio)
+            container_layout.addWidget(radio)
 
         # Set default selection
         self.radio_buttons["super_v"].setChecked(True)
 
-        note_label = QLabel("\nNote: You can change this hotkey later in Settings.")
+        layout.addWidget(selection_container)
+
+        note_label = QLabel("Note: You can change this hotkey later in Settings.")
         note_label.setWordWrap(True)
         note_font = QFont()
         note_font.setPointSize(9)
         note_font.setItalic(True)
         note_label.setFont(note_font)
         note_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note_label.setObjectName("noteLabel")
         layout.addWidget(note_label)
 
         button_layout = QHBoxLayout()
