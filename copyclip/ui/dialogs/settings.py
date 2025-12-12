@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from copyclip.hotkeys.config import HotkeyConfig
-from copyclip.utils.constants import APP_NAME, APP_VERSION, Theme
+from copyclip.utils.constants import APP_ICON, APP_NAME, APP_VERSION, Theme
 
 if TYPE_CHECKING:
     from copyclip.core.settings import SettingsManager
@@ -51,6 +51,10 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Settings")
         self.setMinimumWidth(400)
         self.setModal(True)
+
+        # Set window icon
+        if APP_ICON.exists():
+            self.setWindowIcon(QIcon(str(APP_ICON)))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)

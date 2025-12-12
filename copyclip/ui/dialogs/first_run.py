@@ -1,7 +1,7 @@
 """First run dialog for hotkey selection."""
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QDialog,
@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from copyclip.hotkeys.config import HotkeyConfig
+from copyclip.utils.constants import APP_ICON
 
 
 class FirstRunDialog(QDialog):
@@ -42,6 +43,10 @@ class FirstRunDialog(QDialog):
         self.setWindowTitle("Welcome to CopyClip")
         self.setModal(True)
         self.setMinimumWidth(500)
+
+        # Set window icon
+        if APP_ICON.exists():
+            self.setWindowIcon(QIcon(str(APP_ICON)))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)

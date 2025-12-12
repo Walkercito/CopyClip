@@ -6,7 +6,12 @@ from pathlib import Path
 APP_NAME = "CopyClip"
 APP_VERSION = "0.1.2"
 
+# Project paths
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+ASSETS_DIR = PROJECT_ROOT / "assets"
+APP_ICON = ASSETS_DIR / "CopyClip_logo.png"
 
+# Data paths
 DATA_DIR = (
     Path(os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))) / "clipboard-manager"
 )

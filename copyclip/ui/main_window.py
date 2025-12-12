@@ -5,7 +5,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -25,6 +25,7 @@ from copyclip.ui.dialogs.settings import SettingsDialog
 from copyclip.ui.styles.themes import ThemeManager
 from copyclip.ui.widgets import ClipFrame, FeedbackLabel
 from copyclip.utils.constants import (
+    APP_ICON,
     APP_NAME,
     FEEDBACK_DURATION,
     FEEDBACK_DURATION_SHORT,
@@ -125,6 +126,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
         self.resize(WINDOW_DEFAULT_WIDTH, WINDOW_DEFAULT_HEIGHT)
+
+        # Set window icon
+        if APP_ICON.exists():
+            self.setWindowIcon(QIcon(str(APP_ICON)))
+        else:
+            print(f"Warning: Icon not found at {APP_ICON}")
 
     def _setup_shortcuts(self) -> None:
         """Setup keyboard shortcuts."""
