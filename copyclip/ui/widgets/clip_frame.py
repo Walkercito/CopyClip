@@ -24,17 +24,18 @@ class ClipFrame(QFrame):
     copy_clicked = pyqtSignal(str)
     pin_clicked = pyqtSignal(str)
 
-    def __init__(self, item: HistoryItem, parent=None):
+    def __init__(self, item: HistoryItem, parent=None, max_chars: int = MAX_CHARS_DISPLAY):
         """Initialize the clip frame.
 
         Args:
             item: History item dictionary
             parent: Parent widget
+            max_chars: Maximum characters to display before truncation
         """
         super().__init__(parent)
 
         self._validate_and_extract_item(item)
-
+        self.max_chars = max_chars
         self.is_content_expanded = False
 
         self._setup_frame()
@@ -124,7 +125,7 @@ class ClipFrame(QFrame):
 
     def update_content_display(self) -> None:
         """Update the content label text based on expanded state."""
-        is_truncated = len(self.original_content) > MAX_CHARS_DISPLAY
+        is_truncated = len(self.original_content) > self.max_chars
 
         if self.is_content_expanded:
             self.content_label.setText(self.original_content)
@@ -134,7 +135,7 @@ class ClipFrame(QFrame):
             else:
                 self.toggle_content_label.hide()
         elif is_truncated:
-            display_text = self.original_content[:MAX_CHARS_DISPLAY] + "..."
+            display_text = self.original_content[: self.max_chars] + "..."
             self.content_label.setText(display_text)
             self.toggle_content_label.setText("Show all")
             self.toggle_content_label.show()

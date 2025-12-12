@@ -53,16 +53,24 @@ class HistoryManager:
         backup_file = self.history_file.with_suffix(".json.backup")
 
         try:
-            # Create backup if file exists
             if self.history_file.exists():
                 try:
-                    self.history_file.replace(backup_file)
+                    pinned_items = [item for item in self.history if item.get("pinned", False)]
+                    if pinned_items:
+                        with open(backup_file, "w", encoding="utf-8") as file:
+                            json.dump(pinned_items, file, ensure_ascii=False, indent=2)
+                    elif backup_file.exists():
+                        backup_file.unlink()
                 except Exception as e:
                     print(f"Warning: Could not create backup: {e}")
 
             # Save history
-            with open(self.history_file, "w", encoding="utf-8") as file:
-                json.dump(self.history, file, ensure_ascii=False, indent=2)
+            if self.history:
+                with open(self.history_file, "w", encoding="utf-8") as file:
+                    json.dump(self.history, file, ensure_ascii=False, indent=2)
+            elif self.history_file.exists():
+                # No items left, delete the file
+                self.history_file.unlink()
 
         except Exception as e:
             print(f"Error saving history: {e}")

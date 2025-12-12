@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main, std]
+  pull_request:
+    branches: [main, std]
+
+jobs:
+  lint-and-type-check:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv sync
+
+      - name: Run ruff check
+        run: |
+          uv run ruff check .
+
+      - name: Run ruff format check
+        run: |
+          uv run ruff format --check .
+
+      - name: Run mypy type checking
+        run: |
+          uv run mypy copyclip --ignore-missing-imports --no-strict-optional
+        continue-on-error: true  # Don't fail on type errors for now
+
+  test-install:
+    name: Test Installation on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xsel python3-xlib
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies
+        run: |
+          uv sync
+
+      - name: Verify imports
+        run: |
+          uv run python -c "from copyclip.core.clipboard import ClipboardManager; print('✓ Imports working')"
+
+      - name: Check executables
+        run: |
+          chmod +x bin/copyclip-show-ui
+          ls -la bin/
+          echo "✓ Executables are accessible"
+
+  compatibility-check:
+    name: Desktop Environment Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv sync
+
+      - name: Test environment detection
+        run: |
+          uv run python -c "
+          from copyclip.utils.environment import get_session_type, detect_paste_tool
+          session = get_session_type()
+          tool = detect_paste_tool()
+          print(f'Session type: {session}')
+          print(f'Paste tool: {tool}')
+          print('✓ Environment detection working')
+          "
+
+      - name: Test settings manager
+        run: |
+          uv run python -c "
+          from copyclip.core.settings import SettingsManager
+          sm = SettingsManager()
+          print(f'Settings file: {sm.settings_file}')
+          print(f'Theme: {sm.get(\"theme\")}')
+          print('✓ Settings manager working')
+          "

@@ -2,6 +2,9 @@
 """Helper script to show CopyClip UI manually if hotkeys don't work."""
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtWidgets import QApplication
 

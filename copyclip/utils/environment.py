@@ -1,6 +1,7 @@
 """Environment detection utilities."""
 
 import os
+import shutil
 
 
 def get_session_type() -> str:
@@ -38,3 +39,22 @@ def is_x11() -> bool:
         True if running on X11, False otherwise
     """
     return get_session_type() == "x11"
+
+
+def detect_paste_tool() -> str | None:
+    """Detect available paste tool for auto-paste functionality.
+
+    Returns:
+        Tool name ('xdotool', 'wtype', 'ydotool') or None if none available
+    """
+    if is_x11():
+        # On X11
+        if shutil.which("xdotool"):
+            return "xdotool"
+    else:
+        # On Wayland, prefer wtype, fallback to ydotool
+        if shutil.which("wtype"):
+            return "wtype"
+        if shutil.which("ydotool"):
+            return "ydotool"
+    return None

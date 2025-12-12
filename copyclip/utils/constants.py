@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 APP_NAME = "CopyClip"
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 
 
 DATA_DIR = (
@@ -28,10 +28,22 @@ CLIPBOARD_AUTO_HIDE_DELAY = 800  # Auto-hide delay after copy
 
 # Default settings
 DEFAULT_SETTINGS = {
+    # UI preferences
     "theme": "dark",
-    "window_pinned": False,
     "hotkey": "super_v",
     "first_run_completed": False,
+    # Behavior settings
+    "auto_hide_on_copy": True,
+    "auto_paste_on_copy": False,
+    # Timing settings (in milliseconds)
+    "clipboard_check_interval": 1000,  # Check clipboard every 1 second
+    "clipboard_auto_hide_delay": 800,  # Auto-hide delay after copy
+    "auto_paste_delay": 200,  # Delay before auto-paste for focus restoration
+    # Display settings
+    "max_chars_display": 100,  # Maximum characters to display before truncation
+    # Environment cache (detected once and cached)
+    "window_manager": None,  # Auto-detected: "x11" or "wayland"
+    "paste_tool": None,  # Auto-detected: "xdotool", "wtype", or "ydotool"
 }
 
 # Keyboard shortcuts

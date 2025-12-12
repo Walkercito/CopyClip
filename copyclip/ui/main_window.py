@@ -1,6 +1,7 @@
 """Main application window."""
 
 import contextlib
+import subprocess
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
@@ -25,8 +26,6 @@ from copyclip.ui.styles.themes import ThemeManager
 from copyclip.ui.widgets import ClipFrame, FeedbackLabel
 from copyclip.utils.constants import (
     APP_NAME,
-    CLIPBOARD_AUTO_HIDE_DELAY,
-    CLIPBOARD_CHECK_INTERVAL,
     FEEDBACK_DURATION,
     FEEDBACK_DURATION_SHORT,
     SHORTCUT_HIDE,
@@ -38,6 +37,7 @@ from copyclip.utils.constants import (
     FeedbackType,
     Theme,
 )
+from copyclip.utils.environment import detect_paste_tool, get_session_type
 from copyclip.utils.single_instance import SingleInstance
 
 if TYPE_CHECKING:
@@ -69,6 +69,9 @@ class MainWindow(QMainWindow):
         self.hotkey_manager = None  # Will be set by main.py
         self.single_instance = SingleInstance()
 
+        # Detect and cache environment settings
+        self._cache_environment_settings()
+
         # Window state
         self._force_quit = False
 
@@ -83,7 +86,6 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._create_gui()
         self._setup_shortcuts()
-        self._apply_saved_state()
 
         # Start clipboard monitoring
         self._start_clipboard_timer()
@@ -98,6 +100,25 @@ class MainWindow(QMainWindow):
             hotkey_manager: HotkeyManager instance
         """
         self.hotkey_manager = hotkey_manager
+
+    def _cache_environment_settings(self) -> None:
+        """Detect and cache window manager and paste tool to avoid repeated detection."""
+        # Cache window manager if not already cached
+        if self.settings_manager.get("window_manager") is None:
+            wm = get_session_type()
+            self.settings_manager.set("window_manager", wm)
+            self.settings_manager.save()
+            print(f"Detected window manager: {wm}")
+
+        # Cache paste tool if not already cached
+        if self.settings_manager.get("paste_tool") is None:
+            tool = detect_paste_tool()
+            self.settings_manager.set("paste_tool", tool)
+            self.settings_manager.save()
+            if tool:
+                print(f"Detected paste tool: {tool}")
+            else:
+                print("No paste tool found (xdotool/wtype/ydotool)")
 
     def _setup_window(self) -> None:
         """Setup window properties."""
@@ -281,14 +302,12 @@ class MainWindow(QMainWindow):
 
         return footer
 
-    def _apply_saved_state(self) -> None:
-        """Apply saved window state from settings."""
-
     def _start_clipboard_timer(self) -> None:
         """Start the clipboard monitoring timer."""
         self.clipboard_timer = QTimer(self)
         self.clipboard_timer.timeout.connect(self._check_clipboard_updates)
-        self.clipboard_timer.start(CLIPBOARD_CHECK_INTERVAL)
+        interval = self.settings_manager.get("clipboard_check_interval", 1000)
+        self.clipboard_timer.start(interval)
 
     def _start_signal_timer(self) -> None:
         """Start the signal monitoring timer for single instance."""
@@ -373,7 +392,8 @@ class MainWindow(QMainWindow):
         Args:
             item: History item to display
         """
-        clip_frame = ClipFrame(item)
+        max_chars = self.settings_manager.get("max_chars_display", 100)
+        clip_frame = ClipFrame(item, max_chars=max_chars)
         clip_frame.copy_clicked.connect(self._handle_copy_clicked)
         clip_frame.pin_clicked.connect(self._handle_pin_clicked)
 
@@ -423,8 +443,17 @@ class MainWindow(QMainWindow):
             success = self.history_manager.clipboard_manager.set_content(content)
             if success:
                 self.show_feedback("Copied successfully!", FeedbackType.SUCCESS)
-                if not self.window_pinned:
-                    QTimer.singleShot(CLIPBOARD_AUTO_HIDE_DELAY, self.hide_clipboard)
+
+                # Auto-paste if enabled
+                auto_paste = self.settings_manager.get("auto_paste_on_copy", False)
+                if auto_paste:
+                    self._perform_auto_paste()
+
+                # Auto-hide window based on user preference
+                auto_hide = self.settings_manager.get("auto_hide_on_copy", True)
+                if auto_hide:
+                    delay = self.settings_manager.get("clipboard_auto_hide_delay", 800)
+                    QTimer.singleShot(delay, self.hide_clipboard)
                 return True
             self.show_feedback("Failed to copy content", FeedbackType.ERROR)
             return False
@@ -432,6 +461,69 @@ class MainWindow(QMainWindow):
             print(f"Error copying to clipboard: {e}")
             self.show_feedback(f"Error copying: {str(e)}", FeedbackType.ERROR)
             return False
+
+    def _perform_auto_paste(self) -> None:
+        """Perform auto-paste using xdotool (X11) or ydotool (Wayland)."""
+        try:
+            # Hide window first and wait for focus to return to previous app
+            self.hide()
+            # Delay before pasting for window to hide + focus to restore
+            delay = self.settings_manager.get("auto_paste_delay", 200)
+            QTimer.singleShot(delay, self._execute_paste_command)
+        except Exception as e:
+            print(f"Error scheduling auto-paste: {e}")
+
+    def _execute_paste_command(self) -> None:
+        """Execute the paste command using cached paste tool."""
+        paste_tool = self.settings_manager.get("paste_tool")
+
+        if not paste_tool:
+            wm = self.settings_manager.get("window_manager", "unknown")
+            print(f"No paste tool available for {wm}")
+            self.show_feedback(
+                f"Auto-paste not available. Install: "
+                f"{'wtype or ydotool' if wm == 'wayland' else 'xdotool'}",
+                FeedbackType.WARNING,
+                4000,
+            )
+            return
+
+        try:
+            if paste_tool == "xdotool":
+                subprocess.run(
+                    ["xdotool", "key", "ctrl+v"],
+                    check=True,
+                    capture_output=True,
+                    timeout=1,
+                )
+            elif paste_tool == "wtype":
+                subprocess.run(
+                    ["wtype", "-M", "ctrl", "-P", "v", "-m", "ctrl", "-p", "v"],
+                    check=True,
+                    capture_output=True,
+                    timeout=1,
+                )
+            elif paste_tool == "ydotool":
+                subprocess.run(
+                    ["ydotool", "key", "ctrl+v"],
+                    check=True,
+                    capture_output=True,
+                    timeout=1,
+                )
+        except FileNotFoundError:
+            print(f"Paste tool {paste_tool} not found (was it uninstalled?)")
+            # Re-detect paste tool
+            self.settings_manager.set("paste_tool", None)
+            self.settings_manager.save()
+            self.show_feedback(
+                f"{paste_tool} not found. Re-detecting on next start.", FeedbackType.WARNING, 4000
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"Paste command failed: {e}")
+        except subprocess.TimeoutExpired:
+            print("Auto-paste command timed out")
+        except Exception as e:
+            print(f"Error executing auto-paste: {e}")
 
     def show_feedback(
         self,
