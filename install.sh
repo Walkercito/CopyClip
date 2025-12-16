@@ -7,9 +7,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
-NC='\033[0m' # no color
+NC='\033[0m'
 
-# conf
 REPO_URL="https://github.com/Walkercito/CopyClip.git"
 INSTALL_DIR="$HOME/.local/share/copyclip"
 BIN_DIR="$HOME/.local/bin"
@@ -170,18 +169,14 @@ install_python_deps() {
     print_success "Python dependencies installed"
 }
 
-# setup binaries and symlinks
 setup_binaries() {
     print_header "Setting Up Executables"
 
-    # create bin directory if it doesn't exist
     mkdir -p "$BIN_DIR"
 
-    # make binaries executable
     chmod +x "$INSTALL_DIR/bin/copyclip-show-ui"
     chmod +x "$INSTALL_DIR/main.py"
 
-    # create symlinks
     print_info "Creating symlinks in $BIN_DIR..."
 
     ln -sf "$INSTALL_DIR/main.py" "$BIN_DIR/copyclip"
@@ -189,7 +184,6 @@ setup_binaries() {
 
     print_success "Executables configured"
 
-    # if ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
         print_warning "~/.local/bin is not in your PATH"
         print_info "Add this to your ~/.bashrc or ~/.zshrc:"
@@ -281,11 +275,17 @@ main() {
     print_warning "You may need to enter your password for sudo operations"
     echo ""
 
-    read -p "Continue with installation? [Y/n] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]] && [[ -n $REPLY ]]; then
-        print_error "Installation cancelled"
-        exit 1
+    if [ -t 0 ]; then
+        read -p "Continue with installation? [Y/n] " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]] && [[ -n $REPLY ]]; then
+            print_error "Installation cancelled"
+            exit 1
+        fi
+    else
+        print_info "Running in non-interactive mode, proceeding with installation..."
+        echo ""
+        sleep 2
     fi
 
     install_system_deps
