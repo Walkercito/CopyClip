@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "copyclip-engine",
+  "version": "0.1.0",
+  "description": "Native C++23 port of the CopyClip clipboard engine (headless, no UI).",
+  "license": "MIT",
+  "homepage": "https://github.com/Walkercito/copyclip-cpp",
+  "builtin-baseline": "5d35de2ee8b13d0bcec328153605638a74fbbf84",
+  "dependencies": [
+    {
+      "name": "gtest",
+      "version>=": "1.17.0"
+    },
+    {
+      "name": "spdlog",
+      "version>=": "1.17.0"
+    },
+    {
+      "name": "nlohmann-json",
+      "version>=": "3.12.0"
+    },
+    {
+      "name": "sqlitecpp",
+      "version>=": "3.3.3"
+    }
+  ]
+}
