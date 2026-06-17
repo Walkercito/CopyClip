@@ -26,3 +26,4 @@ function(copyclip_add_test name)
 endfunction()
 
 add_subdirectory(config)
+add_subdirectory(core)
