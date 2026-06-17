@@ -1,0 +1,45 @@
+# clang-tidy configuration for the CopyClip C++ engine.
+#
+# Pinned to clang-tidy 18 (matches the local toolchain and CI). This is the lint
+# gate: the five families CLAUDE.md mandates are enabled wholesale, then a small,
+# individually-justified set of checks is disabled where they fight idiomatic
+# modern C++ or each other. We disable specific checks only — never whole
+# families. WarningsAsErrors promotes the correctness-critical families to hard
+# errors so they gate merges; the remaining (mostly stylistic) findings are
+# surfaced as warnings.
+---
+Checks: >
+  bugprone-*,
+  modernize-*,
+  performance-*,
+  cppcoreguidelines-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-avoid-do-while,
+  -modernize-use-nodiscard
+
+# Per-check rationale (one line each):
+#   modernize-use-trailing-return-type    : style choice; the project uses leading return types.
+#   readability-identifier-length         : too aggressive (flags i, n, id, etc.).
+#   cppcoreguidelines-avoid-magic-numbers  : project constants live in config/Constants.hpp; test data and GoogleTest macros trip this constantly.
+#   readability-magic-numbers              : duplicate of the above (same finding under the readability alias).
+#   cppcoreguidelines-pro-bounds-array-to-pointer-decay : fires on standard idioms (e.g. assert) and array/std interop; observe-only decay is safe here.
+#   cppcoreguidelines-avoid-do-while       : do/while is a legitimate construct (used by some std-style macros and loops).
+#   modernize-use-nodiscard                : opinionated; we add [[nodiscard]] deliberately, not blanket.
+
+# Promote the correctness-critical families to errors so they gate the build.
+# bugprone-* is the floor CLAUDE.md requires; cppcoreguidelines-* and
+# performance-* carry real safety/perf bugs, so they are errors too. The
+# stylistic readability-*/modernize-* findings stay warnings.
+WarningsAsErrors: 'bugprone-*,cppcoreguidelines-*,performance-*'
+
+# Match the project's own headers under src/ across every layer; never lint
+# third-party (vcpkg) or system headers.
+HeaderFilterRegex: '.*/src/.*'
+
+# Treat project headers as our own for naming/diagnostics; system headers stay external.
+SystemHeaders: false

@@ -1,0 +1,25 @@
+# clang-format configuration for the CopyClip C++ engine.
+#
+# Pinned to clang-format 18 (matches the local toolchain and CI). LLVM base —
+# the closest fit to the idiomatic modern-C++ style the project uses — tuned to
+# a 100-column limit to match the Python reference. Keep this deliberately small:
+# the base already encodes sensible defaults; we override only what we care about.
+---
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20            # clang-format 18 has no explicit c++23 token; c++20 is the newest and parses C++23 fine.
+ColumnLimit: 100
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4   # de-indent public:/private:/protected: by one level.
+PointerAlignment: Left     # int* p, not int *p.
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BreakBeforeBraces: Attach
+SpaceAfterTemplateKeyword: true
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive
+FixNamespaceComments: true

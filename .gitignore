@@ -13,6 +13,10 @@ CMakeUserPresets.json
 # Generated compilation database (tools read it from the build dir)
 /compile_commands.json
 
+# Python bytecode cache (the .claude/hooks/ scripts run under python3)
+__pycache__/
+*.pyc
+
 # Caches and editor cruft
 .cache/
 .vs/
