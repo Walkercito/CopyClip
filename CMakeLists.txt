@@ -64,5 +64,11 @@ endif()
 
 # --- Layers -------------------------------------------------------------------
 # src/CMakeLists.txt adds one subdirectory per layer as each comes to exist.
-# For Task 0.1 only src/core/ exists.
 add_subdirectory(src)
+
+# --- Tests --------------------------------------------------------------------
+# GoogleTest + CTest. Enabled unconditionally: the quality gate runs ctest on
+# every preset. tests/ provides a copyclip_add_test() helper and one target per
+# unit under test.
+enable_testing()
+add_subdirectory(tests)
