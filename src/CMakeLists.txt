@@ -3,3 +3,4 @@
 # graph. Layers are added here as they come to exist.
 add_subdirectory(config)
 add_subdirectory(core)
+add_subdirectory(storage)
