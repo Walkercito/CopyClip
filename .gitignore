@@ -1,0 +1,27 @@
+# Build output
+build/
+build-*/
+out/
+cmake-build-*/
+
+# vcpkg (toolchain lives at $VCPKG_ROOT; per-project installs are generated)
+vcpkg_installed/
+
+# Local, machine-specific CMake presets
+CMakeUserPresets.json
+
+# Generated compilation database (tools read it from the build dir)
+/compile_commands.json
+
+# Caches and editor cruft
+.cache/
+.vs/
+.vscode/
+*.user
+.DS_Store
+
+# Object/artifact files
+*.o
+*.a
+*.so
+*.obj
