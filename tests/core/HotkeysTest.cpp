@@ -1,0 +1,94 @@
+// Port of the reference oracle tests/core/test_hotkeys.py.
+//
+// Hotkeys.{hpp,cpp} is the catalog of supported hotkey presets as pure data
+// (no Xlib). The Python reference keeps a single dict _PRESETS, a DEFAULT_PRESET,
+// get_spec(preset), and all_presets(); these cases assert each piece translates:
+// every preset resolves to a well-formed spec, the SUPER_V mapping is exact,
+// kDefaultPreset is SuperV, and the catalog exposes all four presets.
+
+#include "core/Hotkeys.hpp"
+#include "core/Enums.hpp"
+#include "core/Models.hpp"
+
+#include <algorithm>
+#include <array>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+namespace {
+
+namespace core = copyclip::core;
+
+// The closed set of presets under test, mirroring iteration over the Python
+// HotkeyPreset enum. Declared once so the cases below stay DRY.
+constexpr std::array<core::HotkeyPreset, 4> kAllPresetEnumerators{
+    core::HotkeyPreset::SuperV,
+    core::HotkeyPreset::CtrlAltV,
+    core::HotkeyPreset::SuperC,
+    core::HotkeyPreset::CtrlShiftV,
+};
+
+// test_each_preset_maps_to_a_spec: every preset resolves to a spec whose key is
+// a valid enumerator and whose modifiers are all valid enumerators. In C++ the
+// enum is closed and type-safe, so "valid" reduces to "the spec is non-empty":
+// at least one modifier and a key that round-trips through to_string.
+TEST(HotkeysTest, EachPresetMapsToASpec) {
+    for (const core::HotkeyPreset preset : kAllPresetEnumerators) {
+        const core::HotkeySpec spec = core::get_spec(preset);
+        EXPECT_FALSE(spec.modifiers.empty());
+        EXPECT_FALSE(core::to_string(spec.key).empty());
+        for (const core::Modifier modifier : spec.modifiers) {
+            EXPECT_FALSE(core::to_string(modifier).empty());
+        }
+    }
+}
+
+// test_super_v_spec: SUPER_V maps to ((SUPER,), V) with display name "Super+V".
+TEST(HotkeysTest, SuperVSpecHasSuperModifierAndVKey) {
+    const core::HotkeySpec spec = core::get_spec(core::HotkeyPreset::SuperV);
+    const std::vector<core::Modifier> expected_modifiers{core::Modifier::Super};
+    EXPECT_EQ(spec.modifiers, expected_modifiers);
+    EXPECT_EQ(spec.key, core::Key::V);
+    EXPECT_EQ(spec.display_name(), "Super+V");
+}
+
+// test_default_preset_is_super_v.
+TEST(HotkeysTest, DefaultPresetIsSuperV) {
+    EXPECT_EQ(core::kDefaultPreset, core::HotkeyPreset::SuperV);
+}
+
+// The remaining catalog entries match the reference dict exactly.
+TEST(HotkeysTest, CatalogMapsRemainingPresetsExactly) {
+    const core::HotkeySpec ctrl_alt_v = core::get_spec(core::HotkeyPreset::CtrlAltV);
+    EXPECT_EQ(ctrl_alt_v.modifiers,
+              (std::vector<core::Modifier>{core::Modifier::Ctrl, core::Modifier::Alt}));
+    EXPECT_EQ(ctrl_alt_v.key, core::Key::V);
+
+    const core::HotkeySpec super_c = core::get_spec(core::HotkeyPreset::SuperC);
+    EXPECT_EQ(super_c.modifiers, (std::vector<core::Modifier>{core::Modifier::Super}));
+    EXPECT_EQ(super_c.key, core::Key::C);
+
+    const core::HotkeySpec ctrl_shift_v = core::get_spec(core::HotkeyPreset::CtrlShiftV);
+    EXPECT_EQ(ctrl_shift_v.modifiers,
+              (std::vector<core::Modifier>{core::Modifier::Ctrl, core::Modifier::Shift}));
+    EXPECT_EQ(ctrl_shift_v.key, core::Key::V);
+}
+
+// all_presets() returns a copy of the full catalog: one entry per enumerator,
+// each agreeing with get_spec. Mirrors all_presets() == dict(_PRESETS).
+TEST(HotkeysTest, AllPresetsReturnsFullCatalog) {
+    const auto catalog = core::all_presets();
+    EXPECT_EQ(catalog.size(), kAllPresetEnumerators.size());
+    for (const core::HotkeyPreset preset : kAllPresetEnumerators) {
+        const auto found =
+            std::find_if(catalog.begin(), catalog.end(),
+                         [preset](const auto& entry) { return entry.first == preset; });
+        ASSERT_NE(found, catalog.end());
+        const core::HotkeySpec direct = core::get_spec(preset);
+        EXPECT_EQ(found->second.modifiers, direct.modifiers);
+        EXPECT_EQ(found->second.key, direct.key);
+    }
+}
+
+} // namespace
