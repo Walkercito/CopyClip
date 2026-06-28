@@ -65,10 +65,17 @@ FirstRunDialog::FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial,
     adw_status_page_set_child(ADW_STATUS_PAGE(status), content);
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), status);
     adw_dialog_set_child(dialog_, toolbar);
+    // Complete first run however the dialog is closed (Get Started, the close
+    // button, click-outside, or Escape) so the welcome never reappears.
+    g_signal_connect(dialog_, "closed", G_CALLBACK(&FirstRunDialog::on_closed), this);
     adw_dialog_present(dialog_, parent);
 }
 
 void FirstRunDialog::on_get_started(GtkButton* /*button*/, gpointer self) {
+    adw_dialog_close(static_cast<FirstRunDialog*>(self)->dialog_);
+}
+
+void FirstRunDialog::on_closed(AdwDialog* /*dialog*/, gpointer self) {
     static_cast<FirstRunDialog*>(self)->finish();
 }
 
@@ -79,7 +86,6 @@ void FirstRunDialog::finish() {
     if (index < presets.size()) {
         on_finished_(presets.at(index).first);
     }
-    adw_dialog_close(dialog_);
 }
 
 } // namespace copyclip::ui

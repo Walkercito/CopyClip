@@ -26,6 +26,7 @@ public:
 
 private:
     static void on_get_started(GtkButton* button, gpointer self);
+    static void on_closed(AdwDialog* dialog, gpointer self);
     void finish();
 
     FinishedCallback on_finished_;
