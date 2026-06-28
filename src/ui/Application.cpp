@@ -6,6 +6,7 @@
 #include <adwaita.h>
 
 #include <giomm/simpleaction.h>
+#include <glibmm/main.h>
 
 #include <string>
 
@@ -37,7 +38,11 @@ void Application::on_activate() {
                                                settings_.get(), *clipboard_);
         clipboard_->start([this](const std::string& text) { history_.get().add(text); });
         application_->hold(); // keep capturing in the background after the window hides
-        register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
+        // Register on idle so the synchronous gsettings calls don't delay the
+        // window appearing.
+        Glib::signal_idle().connect_once([this] {
+            register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
+        });
     }
     window_->toggle();
 }
