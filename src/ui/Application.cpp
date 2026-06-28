@@ -1,6 +1,7 @@
 #include "ui/Application.hpp"
 
 #include "ui/Constants.hpp"
+#include "ui/GnomeShortcut.hpp"
 
 #include <adwaita.h>
 
@@ -36,6 +37,7 @@ void Application::on_activate() {
                                                settings_.get(), *clipboard_);
         clipboard_->start([this](const std::string& text) { history_.get().add(text); });
         application_->hold(); // keep capturing in the background after the window hides
+        register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
     }
     window_->toggle();
 }

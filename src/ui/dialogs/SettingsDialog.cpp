@@ -3,6 +3,7 @@
 #include "core/Enums.hpp"
 #include "core/Hotkeys.hpp"
 #include "core/Models.hpp"
+#include "ui/GnomeShortcut.hpp"
 
 #include <adwaita.h>
 
@@ -125,6 +126,7 @@ void SettingsDialog::apply_hotkey(unsigned int index) {
     core::Settings updated = settings_.get().settings();
     updated.hotkey = presets.at(index).first;
     settings_.get().update(updated);
+    register_gnome_shortcut(executable_path(), updated.hotkey);
 }
 
 void SettingsDialog::apply_auto_hide(bool active) {
