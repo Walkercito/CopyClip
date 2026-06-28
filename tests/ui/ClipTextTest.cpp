@@ -32,10 +32,34 @@ TEST(ClipTextTest, TruncationCutsOnCodePointBoundaries) {
     EXPECT_TRUE(preview.truncated);
 }
 
-TEST(ClipTextTest, ZeroLimitDisablesTruncation) {
+TEST(ClipTextTest, ZeroLimitKeepsTheFlattenedText) {
     const Preview preview = make_preview("hello world", 0);
     EXPECT_EQ(preview.text, "hello world");
     EXPECT_FALSE(preview.truncated);
+}
+
+TEST(ClipTextTest, FlattensNewlinesToOneLineAndOffersExpand) {
+    const Preview preview = make_preview("line1\nline2\nline3", 100);
+    EXPECT_EQ(preview.text, "line1 line2 line3");
+    EXPECT_TRUE(preview.truncated);
+}
+
+TEST(ClipTextTest, CollapsesSpaceRunsWithoutOfferingExpand) {
+    const Preview preview = make_preview("a   b", 100);
+    EXPECT_EQ(preview.text, "a b");
+    EXPECT_FALSE(preview.truncated);
+}
+
+TEST(ClipTextTest, TrimsLeadingAndTrailingWhitespace) {
+    const Preview preview = make_preview("   hi   ", 100);
+    EXPECT_EQ(preview.text, "hi");
+    EXPECT_FALSE(preview.truncated);
+}
+
+TEST(ClipTextTest, TabsAreStructuralAndOfferExpand) {
+    const Preview preview = make_preview("a\tb", 100);
+    EXPECT_EQ(preview.text, "a b");
+    EXPECT_TRUE(preview.truncated);
 }
 
 } // namespace

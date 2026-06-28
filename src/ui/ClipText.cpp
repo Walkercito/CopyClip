@@ -1,6 +1,6 @@
 #include "ui/ClipText.hpp"
 
-#include <utility>
+#include <string>
 
 namespace copyclip::ui {
 
@@ -27,27 +27,53 @@ constexpr std::string_view kEllipsis{"…"};
     return 1;
 }
 
+[[nodiscard]] bool is_ascii_whitespace(char ch) {
+    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' || ch == '\v';
+}
+
+// Structural whitespace makes the flattened preview hide something (line breaks,
+// tab layout), so the card should offer to expand even when it fits the limit.
+[[nodiscard]] bool is_structural_whitespace(char ch) {
+    return ch == '\n' || ch == '\r' || ch == '\t';
+}
+
 } // namespace
 
 Preview make_preview(std::string_view content, std::size_t max_code_points) {
+    // Flatten to a single line: collapse every run of ASCII whitespace to one
+    // space and trim the ends. Multi-byte UTF-8 bytes are never ASCII whitespace,
+    // so they pass through untouched.
+    std::string flat;
+    flat.reserve(content.size());
+    bool has_structure = false;
+    bool pending_space = false;
+    for (const char ch : content) {
+        if (is_ascii_whitespace(ch)) {
+            has_structure = has_structure || is_structural_whitespace(ch);
+            pending_space = !flat.empty(); // trim leading; mark an internal gap
+            continue;
+        }
+        if (pending_space) {
+            flat.push_back(' ');
+            pending_space = false;
+        }
+        flat.push_back(ch);
+    }
+
     if (max_code_points == 0) {
-        return {std::string{content}, false};
+        return {flat, has_structure};
     }
 
     std::size_t byte = 0;
     std::size_t code_points = 0;
-    while (byte < content.size() && code_points < max_code_points) {
-        byte += sequence_length(static_cast<unsigned char>(content[byte]));
+    while (byte < flat.size() && code_points < max_code_points) {
+        byte += sequence_length(static_cast<unsigned char>(flat[byte]));
         ++code_points;
     }
 
-    if (byte >= content.size()) {
-        return {std::string{content}, false};
-    }
-
-    std::string text{content.substr(0, byte)};
-    text += kEllipsis;
-    return {std::move(text), true};
+    const bool length_truncated = byte < flat.size();
+    std::string text = length_truncated ? flat.substr(0, byte) + std::string{kEllipsis} : flat;
+    return {std::move(text), length_truncated || has_structure};
 }
 
 } // namespace copyclip::ui

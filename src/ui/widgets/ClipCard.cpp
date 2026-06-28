@@ -86,15 +86,14 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, Act
 
 void ClipCard::render_content() {
     const Preview preview = make_preview(content_, max_chars_);
-    const bool has_more = preview.truncated || content_.find('\n') != std::string::npos;
 
     content_label_->set_text(expanded_ ? content_ : preview.text);
     content_label_->set_ellipsize(expanded_ ? Pango::EllipsizeMode::NONE
                                             : Pango::EllipsizeMode::END);
     content_label_->set_lines(expanded_ ? -1 : kCollapsedLines);
 
-    toggle_button_->set_visible(has_more);
-    if (has_more) {
+    toggle_button_->set_visible(preview.truncated);
+    if (preview.truncated) {
         toggle_button_->set_label(expanded_ ? "Show less" : "Show all");
     }
 }
