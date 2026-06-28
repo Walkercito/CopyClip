@@ -38,6 +38,15 @@ MainWindow::MainWindow(GtkApplication* application, core::HistoryService& histor
 
 void MainWindow::build_ui(GtkApplication* application) {
     window_ = ADW_APPLICATION_WINDOW(adw_application_window_new(application));
+
+    // Closing hides the window so the app keeps capturing in the background.
+    g_signal_connect(window_, "close-request",
+                     G_CALLBACK(+[](GtkWindow* window, gpointer) -> gboolean {
+                         gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
+                         return TRUE;
+                     }),
+                     nullptr);
+
     const std::string title{config::kAppName};
     gtk_window_set_title(GTK_WINDOW(window_), title.c_str());
     gtk_window_set_default_size(GTK_WINDOW(window_), kWindowDefaultWidth, kWindowDefaultHeight);
@@ -191,6 +200,14 @@ bool MainWindow::matches(const std::string& content) const {
 
 void MainWindow::present() {
     gtk_window_present(GTK_WINDOW(window_));
+}
+
+void MainWindow::toggle() {
+    if (gtk_widget_get_visible(GTK_WIDGET(window_)) != FALSE) {
+        gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+    } else {
+        gtk_window_present(GTK_WINDOW(window_));
+    }
 }
 
 } // namespace copyclip::ui

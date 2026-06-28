@@ -38,6 +38,9 @@ public:
     MainWindow& operator=(MainWindow&&) = delete;
 
     void present();
+    // Show and focus the window if hidden, otherwise hide it (global-shortcut
+    // relaunch toggles visibility).
+    void toggle();
 
 private:
     void build_ui(GtkApplication* application);
