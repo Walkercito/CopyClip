@@ -174,6 +174,9 @@ void MainWindow::apply_filter() {
 void MainWindow::copy(const std::string& content) {
     clipboard_.get().write(content);
     history_.get().add(content);
+    if (settings_.get().settings().auto_hide_on_copy) {
+        gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+    }
 }
 
 void MainWindow::pin(const std::string& content) {
@@ -205,8 +208,15 @@ void MainWindow::present() {
 void MainWindow::toggle() {
     if (gtk_widget_get_visible(GTK_WIDGET(window_)) != FALSE) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+        return;
+    }
+    gtk_window_present(GTK_WINDOW(window_));
+    // Start on the search field (type to filter); never leave a header button
+    // showing the focus ring.
+    if (gtk_widget_get_visible(GTK_WIDGET(search_->gobj())) != FALSE) {
+        search_->grab_focus();
     } else {
-        gtk_window_present(GTK_WINDOW(window_));
+        gtk_window_set_focus(GTK_WINDOW(window_), nullptr);
     }
 }
 
