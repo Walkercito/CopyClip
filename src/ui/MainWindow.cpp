@@ -21,6 +21,8 @@ namespace copyclip::ui {
 namespace {
 
 constexpr int kPlaceholderIconSize = 48;
+constexpr const char* kPageList = "list";
+constexpr const char* kPageEmpty = "empty";
 
 } // namespace
 
@@ -57,49 +59,39 @@ void MainWindow::build_ui(GtkApplication* application) {
     search_->set_placeholder_text("Search clipboard history…");
     search_->signal_search_changed().connect([this] {
         search_text_ = search_->get_text().raw();
-        update_placeholder();
-        list_->invalidate_filter();
+        apply_filter();
     });
     content->append(*search_);
 
+    stack_ = Gtk::make_managed<Gtk::Stack>();
+    stack_->set_vexpand(true);
+
     auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
     scrolled->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
-    scrolled->set_vexpand(true);
-
     list_ = Gtk::make_managed<Gtk::ListBox>();
     list_->set_selection_mode(Gtk::SelectionMode::NONE);
     list_->add_css_class("boxed-list");
     list_->set_valign(Gtk::Align::START);
-    list_->set_filter_func([this](Gtk::ListBoxRow* row) {
-        auto* card = dynamic_cast<ClipCard*>(row);
-        return card != nullptr && matches(card->content());
-    });
+    scrolled->set_child(*list_);
+    stack_->add(*scrolled, kPageList);
 
-    // Empty / no-results placeholder, built from plain gtkmm widgets so the list
-    // box owns it cleanly (an Adw-C widget wrapped here mismanages its lifetime).
-    auto* placeholder = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
-    placeholder->set_valign(Gtk::Align::CENTER);
-    placeholder->set_halign(Gtk::Align::CENTER);
-    placeholder->set_vexpand(true);
-
+    auto* empty = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
+    empty->set_valign(Gtk::Align::CENTER);
+    empty->set_halign(Gtk::Align::CENTER);
     auto* icon = Gtk::make_managed<Gtk::Image>();
     icon->set_from_icon_name("edit-paste-symbolic");
     icon->set_pixel_size(kPlaceholderIconSize);
     icon->add_css_class("dim-label");
-    placeholder->append(*icon);
-
+    empty->append(*icon);
     empty_title_ = Gtk::make_managed<Gtk::Label>();
     empty_title_->add_css_class("title-2");
-    placeholder->append(*empty_title_);
-
+    empty->append(*empty_title_);
     empty_description_ = Gtk::make_managed<Gtk::Label>();
     empty_description_->add_css_class("dim-label");
-    placeholder->append(*empty_description_);
+    empty->append(*empty_description_);
+    stack_->add(*empty, kPageEmpty);
 
-    list_->set_placeholder(*placeholder);
-
-    scrolled->set_child(*list_);
-    content->append(*scrolled);
+    content->append(*stack_);
 
     adw_toolbar_view_set_content(toolbar, GTK_WIDGET(content->gobj()));
     adw_application_window_set_content(window_, GTK_WIDGET(toolbar));
@@ -127,11 +119,28 @@ void MainWindow::rebuild_cards() {
             [this](const std::string& content) { pin(content); }));
     }
 
-    update_placeholder();
-    list_->invalidate_filter();
+    apply_filter();
 }
 
-void MainWindow::update_placeholder() {
+void MainWindow::apply_filter() {
+    std::size_t visible = 0;
+    for (Gtk::Widget* child = list_->get_first_child(); child != nullptr;
+         child = child->get_next_sibling()) {
+        auto* card = dynamic_cast<ClipCard*>(child);
+        if (card == nullptr) {
+            continue;
+        }
+        const bool shown = matches(card->content());
+        card->set_visible(shown);
+        if (shown) {
+            ++visible;
+        }
+    }
+
+    if (visible > 0) {
+        stack_->set_visible_child(kPageList);
+        return;
+    }
     if (card_count_ == 0) {
         empty_title_->set_text("No clipboard history yet");
         empty_description_->set_text("Copy something to get started");
@@ -139,6 +148,7 @@ void MainWindow::update_placeholder() {
         empty_title_->set_text("No results");
         empty_description_->set_text("Nothing matches your search");
     }
+    stack_->set_visible_child(kPageEmpty);
 }
 
 void MainWindow::copy(const std::string& content) {
