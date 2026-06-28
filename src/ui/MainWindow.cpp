@@ -7,8 +7,8 @@
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/image.h>
 #include <gtkmm/scrolledwindow.h>
-#include <gtkmm/widget.h>
 
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
@@ -18,13 +18,19 @@
 
 namespace copyclip::ui {
 
+namespace {
+
+constexpr int kPlaceholderIconSize = 48;
+
+} // namespace
+
 MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
                        core::SettingsService& settings, core::ClipboardSource& clipboard)
     : history_{history}, clipboard_{clipboard} {
     build_ui(application);
     history_.get().subscribe([this] { schedule_refresh(); });
     apply_theme(settings.settings().theme);
-    refresh();
+    rebuild_cards();
 }
 
 void MainWindow::build_ui(GtkApplication* application) {
@@ -51,7 +57,8 @@ void MainWindow::build_ui(GtkApplication* application) {
     search_->set_placeholder_text("Search clipboard history…");
     search_->signal_search_changed().connect([this] {
         search_text_ = search_->get_text().raw();
-        refresh();
+        update_placeholder();
+        list_->invalidate_filter();
     });
     content->append(*search_);
 
@@ -63,10 +70,33 @@ void MainWindow::build_ui(GtkApplication* application) {
     list_->set_selection_mode(Gtk::SelectionMode::NONE);
     list_->add_css_class("boxed-list");
     list_->set_valign(Gtk::Align::START);
+    list_->set_filter_func([this](Gtk::ListBoxRow* row) {
+        auto* card = dynamic_cast<ClipCard*>(row);
+        return card != nullptr && matches(card->content());
+    });
 
-    placeholder_ = ADW_STATUS_PAGE(adw_status_page_new());
-    adw_status_page_set_icon_name(placeholder_, "edit-paste-symbolic");
-    list_->set_placeholder(*Glib::wrap(GTK_WIDGET(placeholder_)));
+    // Empty / no-results placeholder, built from plain gtkmm widgets so the list
+    // box owns it cleanly (an Adw-C widget wrapped here mismanages its lifetime).
+    auto* placeholder = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
+    placeholder->set_valign(Gtk::Align::CENTER);
+    placeholder->set_halign(Gtk::Align::CENTER);
+    placeholder->set_vexpand(true);
+
+    auto* icon = Gtk::make_managed<Gtk::Image>();
+    icon->set_from_icon_name("edit-paste-symbolic");
+    icon->set_pixel_size(kPlaceholderIconSize);
+    icon->add_css_class("dim-label");
+    placeholder->append(*icon);
+
+    empty_title_ = Gtk::make_managed<Gtk::Label>();
+    empty_title_->add_css_class("title-2");
+    placeholder->append(*empty_title_);
+
+    empty_description_ = Gtk::make_managed<Gtk::Label>();
+    empty_description_->add_css_class("dim-label");
+    placeholder->append(*empty_description_);
+
+    list_->set_placeholder(*placeholder);
 
     scrolled->set_child(*list_);
     content->append(*scrolled);
@@ -80,31 +110,34 @@ void MainWindow::schedule_refresh() {
         return;
     }
     refresh_pending_ = true;
-    Glib::signal_idle().connect_once([this] { refresh(); });
+    Glib::signal_idle().connect_once([this] { rebuild_cards(); });
 }
 
-void MainWindow::refresh() {
+void MainWindow::rebuild_cards() {
     refresh_pending_ = false;
     while (Gtk::Widget* child = list_->get_first_child()) {
         list_->remove(*child);
     }
 
     const std::vector<core::ClipboardEntry> entries = history_.get().entries();
+    card_count_ = entries.size();
     for (const core::ClipboardEntry& entry : entries) {
-        if (!matches(entry.content)) {
-            continue;
-        }
         list_->append(*Gtk::make_managed<ClipCard>(
             entry, kMaxPreviewChars, [this](const std::string& content) { copy(content); },
             [this](const std::string& content) { pin(content); }));
     }
 
-    if (entries.empty()) {
-        adw_status_page_set_title(placeholder_, "No clipboard history yet");
-        adw_status_page_set_description(placeholder_, "Copy something to get started");
+    update_placeholder();
+    list_->invalidate_filter();
+}
+
+void MainWindow::update_placeholder() {
+    if (card_count_ == 0) {
+        empty_title_->set_text("No clipboard history yet");
+        empty_description_->set_text("Copy something to get started");
     } else {
-        adw_status_page_set_title(placeholder_, "No results");
-        adw_status_page_set_description(placeholder_, "Nothing matches your search");
+        empty_title_->set_text("No results");
+        empty_description_->set_text("Nothing matches your search");
     }
 }
 

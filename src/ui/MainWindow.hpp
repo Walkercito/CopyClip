@@ -3,8 +3,9 @@
 // The main clipboard window: an AdwApplicationWindow with a header (search +
 // Clear), a boxed-list of clip cards from the HistoryService, and an empty /
 // no-results placeholder. Encapsulates the libadwaita C widgets behind a small
-// C++ object. Refreshes are deferred to an idle so a card may safely trigger one
-// from inside its own click handler.
+// C++ object. Cards are rebuilt only when the history changes; search re-filters
+// the existing rows in place. Rebuilds are deferred to an idle so a card may
+// safely trigger one from inside its own click handler.
 
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
@@ -12,9 +13,11 @@
 
 #include <adwaita.h>
 
+#include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/searchentry.h>
 
+#include <cstddef>
 #include <functional>
 #include <string>
 
@@ -36,7 +39,8 @@ public:
 private:
     void build_ui(GtkApplication* application);
     void schedule_refresh();
-    void refresh();
+    void rebuild_cards();
+    void update_placeholder();
     void copy(const std::string& content);
     void pin(const std::string& content);
     void clear_history();
@@ -45,11 +49,13 @@ private:
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::ClipboardSource> clipboard_;
     bool refresh_pending_ = false;
+    std::size_t card_count_ = 0;
     std::string search_text_;
     AdwApplicationWindow* window_ = nullptr;
     Gtk::ListBox* list_ = nullptr;
     Gtk::SearchEntry* search_ = nullptr;
-    AdwStatusPage* placeholder_ = nullptr;
+    Gtk::Label* empty_title_ = nullptr;
+    Gtk::Label* empty_description_ = nullptr;
 };
 
 } // namespace copyclip::ui

@@ -17,7 +17,10 @@ namespace copyclip::ui {
 namespace {
 
 constexpr int kCardSpacing = 4;
-constexpr int kCardMargin = 8;
+constexpr int kCardMargin = 6;
+
+// Lines of content shown on a collapsed card before it ellipsizes.
+constexpr int kCollapsedLines = 2;
 
 // Local-time "YYYY-MM-DD HH:MM" for the card's timestamp, via GLib's date API.
 [[nodiscard]] std::string format_timestamp(std::chrono::system_clock::time_point when) {
@@ -83,9 +86,15 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, Act
 
 void ClipCard::render_content() {
     const Preview preview = make_preview(content_, max_chars_);
+    const bool has_more = preview.truncated || content_.find('\n') != std::string::npos;
+
     content_label_->set_text(expanded_ ? content_ : preview.text);
-    toggle_button_->set_visible(preview.truncated);
-    if (preview.truncated) {
+    content_label_->set_ellipsize(expanded_ ? Pango::EllipsizeMode::NONE
+                                            : Pango::EllipsizeMode::END);
+    content_label_->set_lines(expanded_ ? -1 : kCollapsedLines);
+
+    toggle_button_->set_visible(has_more);
+    if (has_more) {
         toggle_button_->set_label(expanded_ ? "Show less" : "Show all");
     }
 }
