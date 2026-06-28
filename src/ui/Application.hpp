@@ -1,10 +1,12 @@
 #pragma once
 
-// The UI's DI root: owns the AdwApplication and builds the MainWindow when the
-// application activates. Engine services are injected here and handed to the
-// window.
+// The UI's DI root: owns the AdwApplication and, on activation, the clipboard
+// source and the MainWindow. Engine services are injected here and handed to the
+// window; captured clipboard text is recorded into the history.
 
+#include "core/HistoryService.hpp"
 #include "core/SettingsService.hpp"
+#include "ui/GdkClipboardSource.hpp"
 #include "ui/MainWindow.hpp"
 
 #include <adwaita.h>
@@ -16,7 +18,7 @@ namespace copyclip::ui {
 
 class Application {
 public:
-    explicit Application(core::SettingsService& settings);
+    Application(core::HistoryService& history, core::SettingsService& settings);
     ~Application();
 
     Application(const Application&) = delete;
@@ -29,8 +31,10 @@ public:
 private:
     void on_activate();
 
+    std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::SettingsService> settings_;
     AdwApplication* application_;
+    std::unique_ptr<GdkClipboardSource> clipboard_;
     std::unique_ptr<MainWindow> window_;
 };
 
