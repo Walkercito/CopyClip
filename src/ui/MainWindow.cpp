@@ -13,8 +13,10 @@
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace copyclip::ui {
@@ -24,6 +26,18 @@ namespace {
 constexpr int kPlaceholderIconSize = 48;
 constexpr const char* kPageList = "list";
 constexpr const char* kPageEmpty = "empty";
+
+// The window decoration layout with the maximize button removed (it appears at
+// most once, in either button group).
+[[nodiscard]] std::string layout_without_maximize(std::string layout) {
+    for (const std::string_view token : {",maximize", "maximize,", "maximize"}) {
+        if (const std::size_t pos = layout.find(token); pos != std::string::npos) {
+            layout.erase(pos, token.size());
+            break;
+        }
+    }
+    return layout;
+}
 
 } // namespace
 
@@ -72,6 +86,18 @@ void MainWindow::build_ui(GtkApplication* application) {
 
     AdwToolbarView* toolbar = ADW_TOOLBAR_VIEW(adw_toolbar_view_new());
     AdwHeaderBar* header = ADW_HEADER_BAR(adw_header_bar_new());
+
+    // Drop the maximize button (the window stays resizable for the bottom-sheet
+    // dialogs, but isn't maximizable) while keeping the system's other controls.
+    GValue layout_value = G_VALUE_INIT;
+    g_value_init(&layout_value, G_TYPE_STRING);
+    g_object_get_property(G_OBJECT(gtk_settings_get_default()), "gtk-decoration-layout",
+                          &layout_value);
+    const char* system_layout = g_value_get_string(&layout_value);
+    const std::string decoration_layout =
+        layout_without_maximize(system_layout != nullptr ? system_layout : ":minimize,close");
+    adw_header_bar_set_decoration_layout(header, decoration_layout.c_str());
+    g_value_unset(&layout_value);
 
     auto* clear_button = Gtk::make_managed<Gtk::Button>();
     clear_button->set_icon_name("user-trash-symbolic");
