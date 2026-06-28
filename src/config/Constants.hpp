@@ -24,9 +24,6 @@ inline constexpr std::string_view kHistoryDbName = "history.db";
 inline constexpr std::string_view kSettingsFileName = "settings.json";
 inline constexpr std::string_view kInstanceSocketName = "copyclip.sock";
 
-// --- Logging -----------------------------------------------------------------
-inline constexpr std::string_view kLogFormat = "%(asctime)s %(levelname)-7s %(name)s: %(message)s";
-
 // --- Single-instance IPC -----------------------------------------------------
 // A one-byte "show the window" command sent over the Unix socket.
 inline constexpr char kInstanceShowCommand = 'S';
