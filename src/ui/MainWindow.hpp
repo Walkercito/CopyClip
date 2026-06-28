@@ -10,6 +10,7 @@
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
 #include "core/SettingsService.hpp"
+#include "ui/dialogs/SettingsDialog.hpp"
 
 #include <adwaita.h>
 
@@ -20,6 +21,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace copyclip::ui {
@@ -45,10 +47,12 @@ private:
     void copy(const std::string& content);
     void pin(const std::string& content);
     void clear_history();
+    void open_settings();
     [[nodiscard]] bool matches(const std::string& content) const;
 
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::ClipboardSource> clipboard_;
+    std::reference_wrapper<core::SettingsService> settings_;
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
@@ -58,6 +62,7 @@ private:
     Gtk::SearchEntry* search_ = nullptr;
     Gtk::Label* empty_title_ = nullptr;
     Gtk::Label* empty_description_ = nullptr;
+    std::unique_ptr<SettingsDialog> settings_dialog_;
 };
 
 } // namespace copyclip::ui

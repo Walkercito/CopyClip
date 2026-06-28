@@ -13,6 +13,7 @@
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,7 @@ constexpr const char* kPageEmpty = "empty";
 
 MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
                        core::SettingsService& settings, core::ClipboardSource& clipboard)
-    : history_{history}, clipboard_{clipboard} {
+    : history_{history}, clipboard_{clipboard}, settings_{settings} {
     build_ui(application);
     history_.get().subscribe([this] { schedule_refresh(); });
     apply_theme(settings.settings().theme);
@@ -50,6 +51,13 @@ void MainWindow::build_ui(GtkApplication* application) {
     clear_button->set_tooltip_text("Clear unpinned history");
     clear_button->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::clear_history));
     adw_header_bar_pack_end(header, GTK_WIDGET(clear_button->gobj()));
+
+    auto* settings_button = Gtk::make_managed<Gtk::Button>();
+    settings_button->set_icon_name("emblem-system-symbolic");
+    settings_button->set_tooltip_text("Settings");
+    settings_button->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::open_settings));
+    adw_header_bar_pack_start(header, GTK_WIDGET(settings_button->gobj()));
+
     adw_toolbar_view_add_top_bar(toolbar, GTK_WIDGET(header));
 
     auto* content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
@@ -165,6 +173,12 @@ void MainWindow::pin(const std::string& content) {
 
 void MainWindow::clear_history() {
     history_.get().clear_unpinned();
+}
+
+void MainWindow::open_settings() {
+    settings_dialog_ =
+        std::make_unique<SettingsDialog>(GTK_WIDGET(window_), settings_.get(),
+                                         [this] { apply_theme(settings_.get().settings().theme); });
 }
 
 bool MainWindow::matches(const std::string& content) const {

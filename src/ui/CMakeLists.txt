@@ -18,8 +18,14 @@ add_library(copyclip::ui_text ALIAS copyclip_ui_text)
 target_include_directories(copyclip_ui_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(copyclip_ui_text PRIVATE copyclip::warnings copyclip::sanitizers)
 
-add_library(copyclip_ui STATIC Theme.cpp MainWindow.cpp Application.cpp GdkClipboardSource.cpp
-                               widgets/ClipCard.cpp)
+add_library(
+  copyclip_ui STATIC
+  Theme.cpp
+  MainWindow.cpp
+  Application.cpp
+  GdkClipboardSource.cpp
+  widgets/ClipCard.cpp
+  dialogs/SettingsDialog.cpp)
 add_library(copyclip::ui ALIAS copyclip_ui)
 
 target_include_directories(copyclip_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
