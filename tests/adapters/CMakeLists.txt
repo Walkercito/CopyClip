@@ -1,5 +1,6 @@
 copyclip_add_test(manual_hotkey_listener_test SOURCES ManualHotkeyListenerTest.cpp LIBS
                   copyclip::adapters)
+copyclip_add_test(x11_mod_mask_test SOURCES X11ModMaskTest.cpp LIBS copyclip::adapters)
 
 # QtClipboardSource needs a QGuiApplication, created in a custom main(), so this
 # target links GTest::gtest (not gtest_main) and provides its own entry point.
