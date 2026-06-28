@@ -29,3 +29,8 @@ __pycache__/
 *.a
 *.so
 *.obj
+
+# Local-only tooling/notes — intentionally never tracked
+/docs/plans/
+/.agents/
+/skills-lock.json
