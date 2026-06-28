@@ -36,6 +36,7 @@ FirstRunDialog::FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial,
 
     GtkWidget* group = adw_preferences_group_new();
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(hotkey_row_), "Open shortcut");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(hotkey_row_), "Press these keys to open CopyClip");
     GtkStringList* model = gtk_string_list_new(nullptr);
     const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
         core::all_presets();

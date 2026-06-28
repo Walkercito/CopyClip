@@ -69,6 +69,7 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     adw_preferences_dialog_add(dialog, page);
 
     AdwComboRow* theme_row = add_combo_row(add_group(page, "Appearance"), "Theme");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(theme_row), "Light, dark, or match the system");
     fill_combo(theme_row, {"Follow system", "Light", "Dark"}, theme_index(current.theme));
     g_signal_connect(theme_row, "notify::selected", G_CALLBACK(&SettingsDialog::on_theme_selected),
                      this);
@@ -77,6 +78,8 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
 
     auto* shortcut_enabled_row = ADW_SWITCH_ROW(adw_switch_row_new());
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(shortcut_enabled_row), "Global shortcut");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(shortcut_enabled_row),
+                                "Open CopyClip from anywhere with a keyboard shortcut");
     adw_switch_row_set_active(shortcut_enabled_row,
                               static_cast<gboolean>(is_gnome_shortcut_registered()));
     adw_preferences_group_add(shortcut_group, GTK_WIDGET(shortcut_enabled_row));
@@ -84,6 +87,8 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
                      G_CALLBACK(&SettingsDialog::on_shortcut_toggled), this);
 
     AdwComboRow* hotkey_row = add_combo_row(shortcut_group, "Open CopyClip");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(hotkey_row),
+                                "Key combination that summons the window");
     std::vector<std::string> hotkey_names;
     unsigned int hotkey_selected = 0;
     const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
@@ -100,6 +105,8 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
 
     auto* auto_hide_row = ADW_SWITCH_ROW(adw_switch_row_new());
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(auto_hide_row), "Hide after copying");
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(auto_hide_row),
+                                "Hide the window right after you pick a clip");
     adw_switch_row_set_active(auto_hide_row, static_cast<gboolean>(current.auto_hide_on_copy));
     adw_preferences_group_add(add_group(page, "Behaviour"), GTK_WIDGET(auto_hide_row));
     g_signal_connect(auto_hide_row, "notify::active",
