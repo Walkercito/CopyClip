@@ -52,7 +52,11 @@ void GdkClipboardSource::on_changed() {
     clipboard_->read_text_async([this](Glib::RefPtr<Gio::AsyncResult>& result) {
         try {
             const Glib::ustring text = clipboard_->read_text_finish(result);
-            if (!text.empty()) {
+            // React only to a genuine content change. GdkClipboard::changed also
+            // fires on ownership changes (focus/window events) without the text
+            // changing; without this guard, clearing the history and then moving
+            // the window would re-capture the unchanged clipboard.
+            if (!text.empty() && text.raw() != last_text_) {
                 last_text_ = text.raw();
                 if (on_change_) {
                     on_change_(text.raw());
