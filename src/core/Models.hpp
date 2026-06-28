@@ -21,6 +21,7 @@
 
 #include "config/Constants.hpp"
 #include "core/Enums.hpp"
+#include "core/detail/AsciiCase.hpp"
 
 #include <chrono>
 #include <string>
@@ -36,49 +37,6 @@ struct ClipboardEntry {
     std::chrono::system_clock::time_point created_at;
     bool pinned = false;
 };
-
-namespace detail {
-
-// ASCII letter case folding. Locale-independent and -Wconversion-safe: it works
-// on char throughout, avoiding the int round-trip of std::toupper/std::tolower
-// (which also require unsigned-char casts to be well-defined). Non-letters pass
-// through unchanged.
-inline constexpr char kAsciiCaseGap = 'a' - 'A';
-
-[[nodiscard]] constexpr char ascii_to_upper(char ch) {
-    return (ch >= 'a' && ch <= 'z') ? static_cast<char>(ch - kAsciiCaseGap) : ch;
-}
-
-[[nodiscard]] constexpr char ascii_to_lower(char ch) {
-    return (ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch + kAsciiCaseGap) : ch;
-}
-
-// Fully upper-cases an ASCII view (the key half of display_name: "space" ->
-// "SPACE").
-[[nodiscard]] inline std::string ascii_upper(std::string_view text) {
-    std::string result;
-    result.reserve(text.size());
-    for (const char ch : text) {
-        result.push_back(ascii_to_upper(ch));
-    }
-    return result;
-}
-
-// Title-cases an ASCII view: first character upper, the rest lower (mirrors
-// Python's str.capitalize() for the modifier half: "ctrl" -> "Ctrl"). An empty
-// view yields an empty string.
-[[nodiscard]] inline std::string ascii_capitalize(std::string_view text) {
-    std::string result;
-    result.reserve(text.size());
-    bool first = true;
-    for (const char ch : text) {
-        result.push_back(first ? ascii_to_upper(ch) : ascii_to_lower(ch));
-        first = false;
-    }
-    return result;
-}
-
-} // namespace detail
 
 // A hotkey: an ordered set of modifiers plus a single key. display_name() is the
 // human-readable label, e.g. {Ctrl, Alt} + V -> "Ctrl+Alt+V".

@@ -1,6 +1,7 @@
 #include "core/Platform.hpp"
 
 #include "core/Enums.hpp"
+#include "core/detail/AsciiCase.hpp"
 
 #include <cstdlib>
 #include <optional>
@@ -18,32 +19,6 @@ namespace {
 inline constexpr std::string_view kXdgSessionTypeEnv = "XDG_SESSION_TYPE";
 inline constexpr std::string_view kWaylandDisplayEnv = "WAYLAND_DISPLAY";
 inline constexpr std::string_view kDisplayEnv = "DISPLAY";
-
-// Distance between an uppercase ASCII letter and its lowercase counterpart.
-// Named so the case-folding arithmetic carries no bare literal.
-inline constexpr char kAsciiCaseShift = 'a' - 'A';
-
-// Locale-independent ASCII lowercase of a single character. Only A-Z are folded;
-// every other byte (including non-ASCII) is returned unchanged. Kept narrow and
-// -Wconversion-safe: the arithmetic stays in `int` and the result is narrowed
-// back with an explicit static_cast.
-[[nodiscard]] char ascii_to_lower(char ch) {
-    if (ch >= 'A' && ch <= 'Z') {
-        return static_cast<char>(ch + kAsciiCaseShift);
-    }
-    return ch;
-}
-
-// ASCII-lowercase a whole string, matching the reference's str.lower() for the
-// ASCII inputs detect_session compares against.
-[[nodiscard]] std::string ascii_to_lower(std::string_view text) {
-    std::string lowered;
-    lowered.reserve(text.size());
-    for (const char ch : text) {
-        lowered.push_back(ascii_to_lower(ch));
-    }
-    return lowered;
-}
 
 // Read an environment variable, returning std::nullopt when it is unset. An
 // empty value is reported as an empty string (the caller decides whether empty
@@ -71,7 +46,7 @@ SessionType detect_session() {
     //    "unknown", "tty", ...) falls through to the display-var checks below.
     const std::optional<std::string_view> declared_raw = env_value(kXdgSessionTypeEnv);
     const std::string declared =
-        declared_raw.has_value() ? ascii_to_lower(*declared_raw) : std::string{};
+        declared_raw.has_value() ? detail::ascii_lower(*declared_raw) : std::string{};
     if (declared == to_string(SessionType::X11)) {
         return SessionType::X11;
     }
