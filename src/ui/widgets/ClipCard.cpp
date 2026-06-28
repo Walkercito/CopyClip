@@ -104,7 +104,14 @@ void ClipCard::toggle_expand() {
     render_content();
 }
 
-void ClipCard::on_pressed(int /*n_press*/, double /*x*/, double /*y*/) {
+void ClipCard::on_pressed(int /*n_press*/, double x, double y) {
+    // Presses on the expand/collapse button are handled by the button itself; the
+    // card must not also copy/pin (which would rebuild the list and undo the
+    // toggle).
+    if (Gtk::Widget* target = pick(x, y, Gtk::PickFlags::DEFAULT);
+        target != nullptr && (target == toggle_button_ || target->is_ancestor(*toggle_button_))) {
+        return;
+    }
     const Gdk::ModifierType state = gesture_->get_current_event_state();
     const bool ctrl = (state & Gdk::ModifierType::CONTROL_MASK) == Gdk::ModifierType::CONTROL_MASK;
     if (ctrl) {
