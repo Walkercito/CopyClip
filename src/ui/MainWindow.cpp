@@ -123,6 +123,9 @@ void MainWindow::rebuild_cards() {
 }
 
 void MainWindow::apply_filter() {
+    // The search bar is only useful once there is something to search.
+    search_->set_visible(card_count_ > 0);
+
     std::size_t visible = 0;
     for (Gtk::Widget* child = list_->get_first_child(); child != nullptr;
          child = child->get_next_sibling()) {
