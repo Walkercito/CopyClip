@@ -13,8 +13,6 @@ inline constexpr std::string_view kApplicationId{"dev.walkercito.CopyClip"};
 
 inline constexpr int kWindowDefaultWidth = 420;
 inline constexpr int kWindowDefaultHeight = 640;
-inline constexpr int kWindowMinWidth = 360;
-inline constexpr int kWindowMinHeight = 420;
 
 // Margin around the content area and the list, in pixels.
 inline constexpr int kContentMargin = 12;

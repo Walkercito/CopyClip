@@ -50,7 +50,10 @@ void MainWindow::build_ui(GtkApplication* application) {
     const std::string title{config::kAppName};
     gtk_window_set_title(GTK_WINDOW(window_), title.c_str());
     gtk_window_set_default_size(GTK_WINDOW(window_), kWindowDefaultWidth, kWindowDefaultHeight);
-    gtk_widget_set_size_request(GTK_WIDGET(window_), kWindowMinWidth, kWindowMinHeight);
+    // GTK4 has no max-size hint, so a fixed-size popup is the clean way to stop the
+    // window being maximized/fullscreened (which breaks the layout) or shrunk too
+    // small.
+    gtk_window_set_resizable(GTK_WINDOW(window_), FALSE);
 
     AdwToolbarView* toolbar = ADW_TOOLBAR_VIEW(adw_toolbar_view_new());
     AdwHeaderBar* header = ADW_HEADER_BAR(adw_header_bar_new());
