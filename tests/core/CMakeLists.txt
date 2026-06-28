@@ -4,3 +4,4 @@ copyclip_add_test(interfaces_test SOURCES InterfacesTest.cpp LIBS copyclip::core
 copyclip_add_test(platform_test SOURCES PlatformTest.cpp LIBS copyclip::core)
 copyclip_add_test(hotkeys_test SOURCES HotkeysTest.cpp LIBS copyclip::core)
 copyclip_add_test(history_service_test SOURCES HistoryServiceTest.cpp LIBS copyclip::core)
+copyclip_add_test(settings_service_test SOURCES SettingsServiceTest.cpp LIBS copyclip::core)
