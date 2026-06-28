@@ -6,7 +6,12 @@
 #include <glibmm/error.h>
 #include <glibmm/ustring.h>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
+#include <string>
+#include <system_error>
 #include <utility>
 
 namespace copyclip::ui {
@@ -21,9 +26,27 @@ namespace {
     return display->get_clipboard();
 }
 
+[[nodiscard]] std::string read_state(const std::filesystem::path& path) {
+    std::ifstream stream{path, std::ios::binary};
+    if (!stream) {
+        return {};
+    }
+    return std::string{std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+}
+
+void write_state(const std::filesystem::path& path, const std::string& content) {
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    std::ofstream stream{path, std::ios::binary | std::ios::trunc};
+    if (stream) {
+        stream << content;
+    }
+}
+
 } // namespace
 
-GdkClipboardSource::GdkClipboardSource() : clipboard_{default_clipboard()} {}
+GdkClipboardSource::GdkClipboardSource(std::filesystem::path state_file)
+    : clipboard_{default_clipboard()}, state_file_{std::move(state_file)} {}
 
 GdkClipboardSource::~GdkClipboardSource() {
     changed_connection_.disconnect();
@@ -31,6 +54,12 @@ GdkClipboardSource::~GdkClipboardSource() {
 
 void GdkClipboardSource::start(std::function<void(const std::string&)> on_change) {
     on_change_ = std::move(on_change);
+    // Seed from the remembered clipboard so the content already present at launch
+    // isn't re-captured.
+    const std::string remembered = read_state(state_file_);
+    if (!remembered.empty()) {
+        last_text_ = remembered;
+    }
     changed_connection_ =
         clipboard_->signal_changed().connect(sigc::mem_fun(*this, &GdkClipboardSource::on_changed));
 }
@@ -58,6 +87,7 @@ void GdkClipboardSource::on_changed() {
             // the window would re-capture the unchanged clipboard.
             if (!text.empty() && text.raw() != last_text_) {
                 last_text_ = text.raw();
+                write_state(state_file_, text.raw());
                 if (on_change_) {
                     on_change_(text.raw());
                 }

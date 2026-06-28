@@ -14,6 +14,7 @@
 
 #include <glibmm/refptr.h>
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 
@@ -21,7 +22,8 @@ namespace copyclip::ui {
 
 class Application {
 public:
-    Application(core::HistoryService& history, core::SettingsService& settings);
+    Application(core::HistoryService& history, core::SettingsService& settings,
+                std::filesystem::path clipboard_state_file);
     ~Application() = default;
 
     Application(const Application&) = delete;
@@ -36,6 +38,7 @@ private:
 
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::SettingsService> settings_;
+    std::filesystem::path clipboard_state_file_;
     Glib::RefPtr<Gtk::Application> application_;
     std::unique_ptr<GdkClipboardSource> clipboard_;
     std::unique_ptr<MainWindow> window_;

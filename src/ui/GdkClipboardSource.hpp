@@ -11,6 +11,7 @@
 #include <glibmm/refptr.h>
 #include <sigc++/connection.h>
 
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <string>
@@ -19,7 +20,10 @@ namespace copyclip::ui {
 
 class GdkClipboardSource final : public core::ClipboardSource {
 public:
-    GdkClipboardSource();
+    // `state_file` remembers the last-seen clipboard text across launches so
+    // content already present at startup (which Wayland re-offers on focus) isn't
+    // captured again every time.
+    explicit GdkClipboardSource(std::filesystem::path state_file);
     ~GdkClipboardSource() override;
 
     GdkClipboardSource(const GdkClipboardSource&) = delete;
@@ -36,6 +40,7 @@ private:
     void on_changed();
 
     Glib::RefPtr<Gdk::Clipboard> clipboard_;
+    std::filesystem::path state_file_;
     std::function<void(const std::string&)> on_change_;
     std::optional<std::string> last_text_;
     sigc::connection changed_connection_;

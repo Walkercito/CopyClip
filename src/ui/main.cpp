@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
         core::SystemClock clock;
         core::HistoryService history{history_repo, clock, settings.settings().max_history_items};
 
-        ui::Application app{history, settings};
+        ui::Application app{history, settings, config::data_dir() / "last-clipboard"};
         return app.run(argc, argv);
     } catch (const std::exception& error) {
         spdlog::critical("fatal: {}", error.what());

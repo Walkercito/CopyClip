@@ -8,12 +8,16 @@
 #include <giomm/simpleaction.h>
 #include <glibmm/main.h>
 
+#include <filesystem>
 #include <string>
+#include <utility>
 
 namespace copyclip::ui {
 
-Application::Application(core::HistoryService& history, core::SettingsService& settings)
+Application::Application(core::HistoryService& history, core::SettingsService& settings,
+                         std::filesystem::path clipboard_state_file)
     : history_{history}, settings_{settings},
+      clipboard_state_file_{std::move(clipboard_state_file)},
       application_{Gtk::Application::create(std::string{kApplicationId})} {
     application_->signal_startup().connect([] { adw_init(); });
     application_->signal_activate().connect(sigc::mem_fun(*this, &Application::on_activate));
@@ -33,7 +37,7 @@ void Application::on_activate() {
     // Built once; later activations (a relaunch from the global shortcut) just
     // toggle the existing window.
     if (!window_) {
-        clipboard_ = std::make_unique<GdkClipboardSource>();
+        clipboard_ = std::make_unique<GdkClipboardSource>(clipboard_state_file_);
         window_ = std::make_unique<MainWindow>(application_->gobj(), history_.get(),
                                                settings_.get(), *clipboard_);
         clipboard_->start([this](const std::string& text) { history_.get().add(text); });
