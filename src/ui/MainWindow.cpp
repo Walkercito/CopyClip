@@ -47,13 +47,28 @@ void MainWindow::build_ui(GtkApplication* application) {
                      }),
                      nullptr);
 
+    // The window must stay resizable for libadwaita to present dialogs as bottom
+    // sheets (a non-resizable window forces them to float), so instead snap back
+    // from maximize/fullscreen to keep it at a sane popup size.
+    g_signal_connect(window_, "notify::maximized",
+                     G_CALLBACK(+[](GObject* obj, GParamSpec*, gpointer) {
+                         if (gtk_window_is_maximized(GTK_WINDOW(obj)) != FALSE) {
+                             gtk_window_unmaximize(GTK_WINDOW(obj));
+                         }
+                     }),
+                     nullptr);
+    g_signal_connect(window_, "notify::fullscreened",
+                     G_CALLBACK(+[](GObject* obj, GParamSpec*, gpointer) {
+                         if (gtk_window_is_fullscreen(GTK_WINDOW(obj)) != FALSE) {
+                             gtk_window_unfullscreen(GTK_WINDOW(obj));
+                         }
+                     }),
+                     nullptr);
+
     const std::string title{config::kAppName};
     gtk_window_set_title(GTK_WINDOW(window_), title.c_str());
     gtk_window_set_default_size(GTK_WINDOW(window_), kWindowDefaultWidth, kWindowDefaultHeight);
-    // GTK4 has no max-size hint, so a fixed-size popup is the clean way to stop the
-    // window being maximized/fullscreened (which breaks the layout) or shrunk too
-    // small.
-    gtk_window_set_resizable(GTK_WINDOW(window_), FALSE);
+    gtk_widget_set_size_request(GTK_WIDGET(window_), kWindowMinWidth, kWindowMinHeight);
 
     AdwToolbarView* toolbar = ADW_TOOLBAR_VIEW(adw_toolbar_view_new());
     AdwHeaderBar* header = ADW_HEADER_BAR(adw_header_bar_new());
