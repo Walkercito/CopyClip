@@ -87,7 +87,7 @@ void MainWindow::build_ui(GtkApplication* application) {
     scrolled->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     list_ = Gtk::make_managed<Gtk::ListBox>();
     list_->set_selection_mode(Gtk::SelectionMode::NONE);
-    list_->add_css_class("boxed-list");
+    list_->add_css_class("background");
     list_->set_valign(Gtk::Align::START);
     scrolled->set_child(*list_);
     stack_->add(*scrolled, kPageList);

@@ -19,6 +19,10 @@ namespace {
 constexpr int kCardSpacing = 4;
 constexpr int kCardMargin = 6;
 
+// Gap below each card so they read as separate elevated cards (clearer than a
+// grouped boxed-list, especially in light mode).
+constexpr int kCardGap = 6;
+
 // Lines of content shown on a collapsed card before it ellipsizes.
 constexpr int kCollapsedLines = 2;
 
@@ -42,6 +46,9 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, Act
                    ActionCallback on_pin)
     : content_{entry.content}, max_chars_{max_chars}, on_copy_{std::move(on_copy)},
       on_pin_{std::move(on_pin)} {
+    add_css_class("card");
+    set_margin_bottom(kCardGap);
+
     auto* layout = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kCardSpacing);
     layout->set_margin(kCardMargin);
 
