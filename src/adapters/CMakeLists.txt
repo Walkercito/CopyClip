@@ -4,7 +4,8 @@
 # source, the X11 listener, the portal listener); the manual fallback needs
 # neither.
 add_library(copyclip_adapters STATIC ManualHotkeyListener.cpp QtClipboardSource.cpp
-                                     X11HotkeyListener.cpp PortalHotkeyListener.cpp)
+                                     X11HotkeyListener.cpp PortalHotkeyListener.cpp
+                                     Factory.cpp)
 add_library(copyclip::adapters ALIAS copyclip_adapters)
 
 # PortalHotkeyListener is a QObject (it receives the portal's Activated D-Bus
