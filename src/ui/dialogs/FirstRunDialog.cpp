@@ -22,6 +22,7 @@ FirstRunDialog::FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial,
       dialog_{adw_dialog_new()} {
     adw_dialog_set_title(dialog_, "Welcome");
     adw_dialog_set_content_width(dialog_, kDialogContentWidth);
+    adw_dialog_set_presentation_mode(dialog_, ADW_DIALOG_BOTTOM_SHEET);
 
     GtkWidget* toolbar = adw_toolbar_view_new();
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());

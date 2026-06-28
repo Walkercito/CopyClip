@@ -63,10 +63,13 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     : settings_{settings}, on_theme_changed_{std::move(on_theme_changed)} {
     const core::Settings& current = settings.settings();
 
-    auto* dialog = ADW_PREFERENCES_DIALOG(adw_preferences_dialog_new());
-    adw_dialog_set_content_width(ADW_DIALOG(dialog), kDialogContentWidth);
+    // A plain AdwDialog (not AdwPreferencesDialog) so it presents as a bottom sheet
+    // like the welcome dialog, instead of floating centered.
+    AdwDialog* dialog = adw_dialog_new();
+    adw_dialog_set_title(dialog, "Settings");
+    adw_dialog_set_content_width(dialog, kDialogContentWidth);
+    adw_dialog_set_presentation_mode(dialog, ADW_DIALOG_BOTTOM_SHEET);
     auto* page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
-    adw_preferences_dialog_add(dialog, page);
 
     AdwComboRow* theme_row = add_combo_row(add_group(page, "Appearance"), "Theme");
     gtk_widget_set_tooltip_text(GTK_WIDGET(theme_row), "Light, dark, or match the system");
@@ -111,7 +114,11 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     g_signal_connect(auto_hide_row, "notify::active",
                      G_CALLBACK(&SettingsDialog::on_auto_hide_toggled), this);
 
-    adw_dialog_present(ADW_DIALOG(dialog), parent);
+    GtkWidget* toolbar = adw_toolbar_view_new();
+    adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
+    adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), GTK_WIDGET(page));
+    adw_dialog_set_child(dialog, toolbar);
+    adw_dialog_present(dialog, parent);
 }
 
 void SettingsDialog::on_theme_selected(GObject* row, GParamSpec* /*spec*/, gpointer self) {
