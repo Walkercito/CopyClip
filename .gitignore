@@ -30,7 +30,8 @@ __pycache__/
 *.so
 *.obj
 
-# Local-only tooling/notes — intentionally never tracked
+# Local-only tooling/notes — intentionally never tracked. skills-lock.json is
+# kept (the pinned-skills manifest); the installed skill files under .agents/ are
+# not.
 /docs/plans/
 /.agents/
-/skills-lock.json
