@@ -1,13 +1,8 @@
 #pragma once
 
-// The catalog of supported hotkey presets, as pure data.
-//
-// Mirrors the reference module copyclip/core/hotkeys.py: a fixed dict mapping
-// each HotkeyPreset to its HotkeySpec, a default preset, and two readers —
-// get_spec(preset) and all_presets(). This lives in the core layer, so it is
-// pure data with no Xlib/Qt/D-Bus: it only relates the domain enums (core/Enums)
-// to the HotkeySpec value object (core/Models). The catalog itself is defined
-// once in Hotkeys.cpp; both readers consume that single source of truth.
+// Catalog of supported hotkey presets as pure data: a fixed HotkeyPreset ->
+// HotkeySpec mapping plus a default. Mirrors reference core/hotkeys.py. The
+// catalog is defined once in Hotkeys.cpp; both readers share that source.
 
 #include "core/Enums.hpp"
 #include "core/Models.hpp"
@@ -20,15 +15,13 @@ namespace copyclip::core {
 // The preset selected when none is configured (reference DEFAULT_PRESET).
 inline constexpr HotkeyPreset kDefaultPreset = HotkeyPreset::SuperV;
 
-// Return the spec for a preset (reference get_spec). The enum is closed and the
-// catalog is exhaustive over it, so this always resolves; an unknown preset
-// (only reachable via a bogus cast) throws std::out_of_range rather than
-// returning a wrong or empty spec — the C++ analogue of the reference's KeyError.
+// Spec for a preset. The enum is closed and the catalog exhaustive, so this
+// always resolves; a bogus cast throws std::out_of_range (the reference's
+// KeyError analogue) rather than returning a wrong/empty spec.
 [[nodiscard]] HotkeySpec get_spec(HotkeyPreset preset);
 
-// Return a copy of the full catalog, one entry per preset (reference
-// all_presets() == dict(_PRESETS)). The order matches the HotkeyPreset
-// declaration order.
+// Copy of the full catalog in HotkeyPreset declaration order (reference
+// all_presets()).
 [[nodiscard]] std::vector<std::pair<HotkeyPreset, HotkeySpec>> all_presets();
 
 } // namespace copyclip::core

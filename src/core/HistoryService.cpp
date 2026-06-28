@@ -15,12 +15,11 @@ namespace copyclip::core {
 
 namespace {
 
-// The Unicode code points Python's str.isspace() treats as whitespace, so that
-// str.strip() removes them: the ASCII controls and space, the bidirectional
-// separators 0x1C-0x1F, NEL (0x85), and the Unicode space separators. Keeping
-// the full set (not just ASCII) means content that is "blank" by the reference's
-// rule but written in non-ASCII whitespace — e.g. a non-breaking space (U+00A0)
-// or an ideographic space (U+3000) — is rejected too.
+// The code points Python's str.isspace() treats as whitespace (so str.strip()
+// removes them): ASCII controls and space, the separators 0x1C-0x1F, NEL (0x85),
+// and the Unicode space separators. Matching the full set, not just ASCII, means
+// non-ASCII whitespace-only content — e.g. NBSP (U+00A0) or ideographic space
+// (U+3000) — is rejected too, as the reference does.
 [[nodiscard]] constexpr bool is_whitespace_code_point(char32_t code_point) {
     return (code_point >= 0x09 && code_point <= 0x0D) ||
            (code_point >= 0x1C && code_point <= 0x1F) || code_point == 0x20 || code_point == 0x85 ||
@@ -69,11 +68,9 @@ namespace {
     return code_point;
 }
 
-// True when `text` is empty or contains only whitespace — the reject condition
-// for add(), mirroring the reference's `not content or not content.strip()`.
-// Decodes UTF-8 and applies Python's full whitespace set, so non-ASCII
-// whitespace-only content is rejected too. Malformed UTF-8 is treated as real
-// content (not blank), erring toward keeping data.
+// True when `text` is empty or only whitespace — add()'s reject condition,
+// mirroring the reference's `not content or not content.strip()`. Malformed UTF-8
+// counts as real content, erring toward keeping data.
 [[nodiscard]] bool is_blank(std::string_view text) {
     std::size_t pos = 0;
     while (pos < text.size()) {

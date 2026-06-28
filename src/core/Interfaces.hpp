@@ -1,21 +1,13 @@
 #pragma once
 
-// Abstract seams for the engine's collaborators.
+// Abstract seams for the engine's collaborators. Mirrors
+// copyclip/core/interfaces.py (@runtime_checkable Protocols) as pure abstract
+// base classes (I.25): production adapters and in-memory test fakes both derive
+// from these, and core/ depends on the abstractions, not the concretions.
 //
-// Mirrors the reference module copyclip/core/interfaces.py, where each seam is a
-// @runtime_checkable Protocol: a duck-typed contract that any implementation can
-// satisfy. The C++ port expresses the same contracts as pure abstract base
-// classes (the explicit-interface idiom, I.25): production adapters and the
-// in-memory test fakes both derive from these, and core/ depends on the
-// abstractions rather than the concretions.
-//
-// Each interface is a proper polymorphic base (C.35 + C.67): a public virtual
-// defaulted destructor for safe deletion through a base pointer, plus deleted
-// copy and move special members so an interface can never be sliced or value-
-// copied. They are pure — no data members, no non-virtual logic — so the only
-// inward dependency is core/Models.hpp (the value objects the seams exchange)
-// plus the standard library. No Qt, Xlib, or D-Bus: this lives in the core
-// layer.
+// Each is a proper polymorphic base (C.35 + C.67): public virtual defaulted
+// destructor for safe deletion through a base pointer, plus deleted copy/move so
+// an interface can never be sliced or value-copied.
 
 #include "core/Models.hpp"
 
@@ -27,8 +19,7 @@
 
 namespace copyclip::core {
 
-// A source of the current time. Injected wherever the engine needs "now" so
-// tests can supply a deterministic clock instead of the wall clock.
+// A source of "now", injected so tests can supply a deterministic clock.
 class Clock {
 public:
     Clock() = default;
@@ -43,8 +34,7 @@ public:
 };
 
 // The system clipboard: a watched, readable, writable text channel. start()
-// begins delivering external changes to on_change; read()/write() access the
-// current contents.
+// delivers external changes to on_change.
 class ClipboardSource {
 public:
     ClipboardSource() = default;
@@ -61,8 +51,7 @@ public:
     virtual void write(const std::string& text) = 0;
 };
 
-// A global hotkey listener. start() begins invoking on_activate when the bound
-// combo fires; rebind() changes the combo, reporting whether the grab succeeded.
+// A global hotkey listener. rebind() returns whether the new grab succeeded.
 class HotkeyListener {
 public:
     HotkeyListener() = default;
@@ -78,8 +67,8 @@ public:
     virtual bool rebind(const HotkeySpec& spec) = 0;
 };
 
-// Persistent storage for clipboard history, keyed by content. set_pinned reports
-// whether the entry existed; clear_unpinned drops everything not pinned.
+// History storage, keyed by content. set_pinned returns whether the entry
+// existed; clear_unpinned drops everything not pinned.
 class HistoryRepository {
 public:
     HistoryRepository() = default;
@@ -97,7 +86,6 @@ public:
     [[nodiscard]] virtual std::vector<ClipboardEntry> all() const = 0;
 };
 
-// Persistent storage for the user's Settings.
 class SettingsRepository {
 public:
     SettingsRepository() = default;

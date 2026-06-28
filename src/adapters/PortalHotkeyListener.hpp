@@ -3,17 +3,15 @@
 // Wayland global hotkey via the XDG Desktop Portal GlobalShortcuts interface
 // (Qt6::DBus). Mirrors the reference adapters/hotkeys/wayland_portal.py.
 //
-// The portal owns the actual key binding (the user confirms it in a system
-// dialog); this class creates a session, subscribes to the portal's Activated
-// signal, and forwards it to the activation callback. Construction throws if the
-// GlobalShortcuts portal is unavailable, so the factory can fall back.
+// The portal owns the binding (the user confirms it in a system dialog); this
+// class creates a session, subscribes to the portal's Activated signal, and
+// forwards it. Construction throws if the portal is unavailable, so the factory
+// can fall back.
 //
-// INITIAL VERSION / MANUAL VERIFICATION: the async CreateSession ->
-// BindShortcuts -> Activated flow needs a portal-capable Wayland session and
-// real hardware to iterate. BindShortcuts is issued from the CreateSession
-// response handler in a complete implementation; that is the iteration point
-// left for real hardware. There is no automated test (mirroring the reference);
-// verify by hand on a portal-capable session.
+// INITIAL VERSION / MANUAL VERIFICATION: BindShortcuts (issued from the
+// CreateSession response handler in a full implementation) is the iteration
+// point left for real hardware. No automated test, mirroring the reference;
+// verify by hand on a portal-capable Wayland session.
 
 #include "core/Interfaces.hpp"
 #include "core/Models.hpp"
@@ -57,8 +55,8 @@ private:
     std::unique_ptr<QDBusInterface> interface_;
 
 public Q_SLOTS:
-    // Forwards the portal's Activated signal to the activation callback. Public
-    // because it is invoked by the D-Bus signal/slot machinery.
+    // Forwards the portal's Activated signal to the callback. Public because the
+    // D-Bus signal/slot machinery invokes it.
     void handle_activated(const QDBusObjectPath& session_handle, const QString& shortcut_id,
                           qulonglong timestamp, const QVariantMap& options);
 };

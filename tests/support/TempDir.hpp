@@ -1,22 +1,11 @@
 #pragma once
 
-// RAII temporary directory for storage-layer tests.
-//
-// Creates a unique directory under std::filesystem::temp_directory_path() on
-// construction and removes it (recursively) on destruction, so filesystem-backed
-// repositories can be exercised against real on-disk state without leaking files
-// between tests. Shared by the storage tests (SQLite history here, JSON settings
-// in Task 2.2), mirroring the role of pytest's `tmp_path` fixture in the
-// reference suite.
-//
-// Uniqueness comes from mkdtemp(3), which atomically creates a directory from a
-// template ending in "XXXXXX"; this avoids the TOCTOU race of generating a name
-// and then creating it. (Using mkdtemp/randomness in test support is fine — the
-// no-randomness rule applies to workflow scripts, not test code.)
-//
-// The type owns a filesystem resource, so it follows the Rule of Five: copying
-// would double-free the directory, so copy is deleted; move transfers ownership
-// by clearing the source's path so only the final owner cleans up.
+// RAII temporary directory for the storage-layer tests, mirroring pytest's
+// `tmp_path`: creates a unique dir under temp_directory_path() and removes it
+// recursively on destruction. Uniqueness comes from mkdtemp(3), which creates the
+// directory atomically, avoiding the name-then-create TOCTOU race. Owns a
+// filesystem resource, so it follows the Rule of Five: copy is deleted; move
+// clears the source's path so only the final owner cleans up.
 
 #include <cstdlib>
 #include <filesystem>
@@ -52,7 +41,7 @@ public:
         return *this;
     }
 
-    // The created directory's path. Tests join their fixture files onto it.
+    // The created directory's path; tests join their fixture files onto it.
     [[nodiscard]] const std::filesystem::path& path() const noexcept { return path_; }
 
 private:

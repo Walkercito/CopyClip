@@ -1,24 +1,20 @@
 #pragma once
 
 // Application logic for clipboard history: dedup, pinning, ordering, capacity.
+// Mirrors reference core/history.py — a new item de-dups any prior copy and moves
+// to the front with a fresh timestamp, pinned items sort first and survive
+// eviction, and an over-capacity history sheds its oldest UNPINNED entries.
+// Persistence is delegated to a HistoryRepository.
 //
-// Mirrors the reference module copyclip/core/history.py. The service owns the
-// RULES of the history and delegates persistence to a HistoryRepository: a new
-// item de-duplicates any prior copy and moves to the front with a fresh
-// timestamp, pinned items sort first and survive eviction, and an over-capacity
-// history sheds its oldest UNPINNED entries.
+// Collaborators are injected as reference members (I.11/R.3): the repository and
+// clock are observed, never owned, and outlive the service. The std::mutex makes
+// the type non-copyable/non-movable (Rule of Zero); reads take it through a
+// `mutable` mutex so entries() stays const.
 //
-// The collaborators are injected as reference members (I.11/R.3): the repository
-// and the clock are observed, never owned, and outlive the service. A std::mutex
-// member serializes the mutating rules and makes the type intrinsically
-// non-copyable/non-movable (Rule of Zero — no special members declared). Reads
-// take the same lock through a `mutable` mutex so entries() stays const.
-//
-// Subscriber notification deliberately happens OUTSIDE the lock (CP.22): the
-// callbacks are unknown user code that may re-enter the service (e.g. call
-// entries()), so notify() snapshots the subscriber list under the lock and then
-// invokes each callback after releasing it. Pure core layer: no Qt, Xlib, or
-// D-Bus — only the core seams, the value models, and the standard library.
+// Notification happens OUTSIDE the lock (CP.22): callbacks are unknown user code
+// that may re-enter the service (e.g. call entries()), so notify() snapshots the
+// subscriber list under the lock and invokes each after releasing it. Pure core
+// layer — no Qt, Xlib, or D-Bus.
 
 #include "core/Interfaces.hpp"
 #include "core/Models.hpp"
@@ -35,21 +31,18 @@ class HistoryService {
 public:
     HistoryService(HistoryRepository& repository, Clock& clock, int max_items);
 
-    // Record `content` as the newest history item. Blank input (empty or only
-    // whitespace) is ignored and returns false; otherwise any prior copy is
-    // dropped, the item is re-added with a fresh timestamp, capacity is
-    // enforced, subscribers are notified, and the call returns true.
+    // Record `content` as the newest item. Blank input (empty or whitespace-only)
+    // is ignored and returns false; otherwise any prior copy is dropped, the item
+    // is re-added with a fresh timestamp, and capacity is enforced.
     bool add(const std::string& content);
 
-    // Flip the pinned flag of `content`. Returns the NEW pin state; like the
-    // reference, a false result also means "no such entry" (the dual meaning is
-    // intentional). A missing entry leaves the history untouched.
+    // Flip the pinned flag of `content` and return the NEW pin state. As in the
+    // reference, a false result also means "no such entry" (intentional dual
+    // meaning); a missing entry leaves the history untouched.
     bool toggle_pin(const std::string& content);
 
-    // Drop `content` from the history if present, then notify subscribers.
     void remove(const std::string& content);
 
-    // Drop every unpinned entry, then notify subscribers.
     void clear_unpinned();
 
     // Snapshot of the history, sorted pinned-first then most-recent-first.

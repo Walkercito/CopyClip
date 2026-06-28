@@ -1,24 +1,11 @@
 #pragma once
 
 // In-memory implementations of the core seams, shared across the engine tests.
-//
-// Direct port of the reference module tests/fakes.py. Each fake is a concrete
-// implementation of one abstract interface from core/Interfaces.hpp, holding its
-// state in std members so the test layer can drive and observe it without a
-// display server, real clipboard, or filesystem. They back the Phase 3
-// core-service tests (history, settings, engine), so they are deliberately small
-// and reusable.
-//
-// They are declared `struct`: test fakes are data bags with no invariant to
-// protect — the observation points the tests read (started, text, spec, saved)
-// vary independently (C.2), so they are intentionally public, matching the
-// reference fakes. Collaboration plumbing the tests must not touch (the stored
-// callbacks, the history map) stays under an explicit `private:` section.
-//
-// The fakes follow the Rule of Zero: they declare no copy/move/destructor of
-// their own. Their abstract bases delete copy and move, so the fakes inherit
-// non-copyable / non-movable semantics — tests construct them as local objects
-// and bind them to base references, never copy them.
+// Direct port of the reference tests/fakes.py. Declared `struct`: the fakes are
+// data bags whose observation points the tests read directly (C.2), so there is
+// no invariant to hide; collaboration plumbing the tests must not touch stays
+// under `private:`. Rule of Zero — the abstract bases delete copy/move, so the
+// fakes are non-copyable/non-movable and tests bind them to base references.
 
 #include "core/Enums.hpp"
 #include "core/Interfaces.hpp"
@@ -34,8 +21,7 @@
 
 namespace copyclip::testing {
 
-// A clock pinned to a fixed moment, advanceable by the test. now() returns the
-// stored moment; advance() moves it forward by a type-safe duration.
+// A clock pinned to a fixed moment that the test can advance() forward.
 struct FakeClock final : public core::Clock {
     explicit FakeClock(std::chrono::system_clock::time_point moment) : moment_{moment} {}
 
@@ -47,10 +33,7 @@ private:
     std::chrono::system_clock::time_point moment_;
 };
 
-// A clipboard backed by an in-memory string. write() sets the contents; emit()
-// also fires the registered on_change callback, simulating an external change.
-// A pure data bag (all state public): tests both drive it and inspect its
-// recorded state, so it has no invariant to protect (C.2).
+// A clipboard backed by an in-memory string; emit() simulates an external change.
 struct FakeClipboardSource final : public core::ClipboardSource {
     void start(std::function<void(const std::string&)> callback) override {
         on_change = std::move(callback);
@@ -63,8 +46,7 @@ struct FakeClipboardSource final : public core::ClipboardSource {
 
     void write(const std::string& new_text) override { text = new_text; }
 
-    // Simulate an external clipboard change: update the contents and notify the
-    // registered listener, if any.
+    // Update the contents and notify the registered listener, if any.
     void emit(const std::string& new_text) {
         text = new_text;
         if (on_change) {
@@ -77,9 +59,8 @@ struct FakeClipboardSource final : public core::ClipboardSource {
     bool started = false;
 };
 
-// A hotkey listener that records its binding. rebind() stores the spec and
-// always succeeds; trigger() fires the registered on_activate callback. A pure
-// data bag (all state public) for the same reason as FakeClipboardSource.
+// A hotkey listener that records its binding; trigger() fires the activation
+// callback. rebind() always succeeds.
 struct FakeHotkeyListener final : public core::HotkeyListener {
     void start(std::function<void()> callback) override {
         on_activate = std::move(callback);
@@ -93,7 +74,7 @@ struct FakeHotkeyListener final : public core::HotkeyListener {
         return true;
     }
 
-    // Simulate the hotkey firing: invoke the registered listener, if any.
+    // Simulate the hotkey firing.
     void trigger() {
         if (on_activate) {
             on_activate();
@@ -106,8 +87,6 @@ struct FakeHotkeyListener final : public core::HotkeyListener {
 };
 
 // History stored in a hash map keyed by content, mirroring the reference dict.
-// add() inserts or overwrites by content; set_pinned() reports whether the entry
-// existed; clear_unpinned() keeps only pinned entries.
 class InMemoryHistoryRepository final : public core::HistoryRepository {
 public:
     void add(const core::ClipboardEntry& entry) override { entries_[entry.content] = entry; }
@@ -140,8 +119,7 @@ private:
     std::unordered_map<std::string, core::ClipboardEntry> entries_;
 };
 
-// Settings held in memory. load() returns the current value; save() replaces it.
-// The stored value is exposed as `saved` for assertions (matching the reference).
+// Settings held in memory; the stored value is exposed as `saved` for assertions.
 struct InMemorySettingsRepository final : public core::SettingsRepository {
     InMemorySettingsRepository() = default;
     explicit InMemorySettingsRepository(core::Settings settings) : saved{settings} {}

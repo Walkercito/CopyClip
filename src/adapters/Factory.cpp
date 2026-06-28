@@ -16,9 +16,8 @@ namespace copyclip::adapters {
 
 namespace {
 
-// The real session -> hotkey-backend map. Kept out of the header (and built
-// lazily here) so that merely declaring select_hotkey_listener never pulls in
-// Qt or Xlib.
+// The real session -> backend map, built lazily here (not in the header) so that
+// declaring select_hotkey_listener never pulls in Qt or Xlib.
 std::map<core::SessionType, HotkeyBuilder> default_builders() {
     std::map<core::SessionType, HotkeyBuilder> builders;
     builders[core::SessionType::X11] = [](const core::HotkeySpec& spec) {

@@ -1,16 +1,10 @@
 #pragma once
 
-// RAII environment-variable override for tests.
-//
-// Brings an environment variable to a known state on construction and restores
-// the previous state (original value, or unset) on destruction, so tests that
-// redirect XDG paths or probe session-detection variables cannot leak state into
-// one another. This mirrors pytest's `monkeypatch.setenv` / `monkeypatch.delenv`
-// used by the Python reference tests, but with deterministic scope-based cleanup.
-//
-// The desired state is expressed as std::optional<std::string>: a value sets the
-// variable, std::nullopt unsets it. Either way the prior value (or its absence)
-// is captured at construction and restored in the destructor.
+// RAII environment-variable override for tests: brings a variable to a known
+// state and restores the prior value (or absence) on scope exit, so tests that
+// redirect XDG paths or session-detection vars cannot leak state into each other.
+// Mirrors pytest's monkeypatch.setenv/delenv with deterministic scoped cleanup.
+// The desired state is std::optional<std::string>: a value sets it, nullopt unsets.
 
 #include <cstdlib>
 #include <optional>
@@ -22,10 +16,7 @@ class ScopedEnv {
 public:
     // Bring `name` to `desired` for this scope: a value sets it, std::nullopt
     // unsets it. The prior value or absence is captured here and restored in the
-    // destructor. A single constructor keeps the two call styles — `{"NAME",
-    // "value"}` and `{"NAME", std::nullopt}` — unambiguous: a string literal
-    // converts to std::optional<std::string>, std::nullopt selects the unset
-    // state.
+    // destructor.
     ScopedEnv(std::string name, const std::optional<std::string>& desired)
         : name_{std::move(name)} {
         if (const char* previous = std::getenv(name_.c_str()); previous != nullptr) {
@@ -43,7 +34,7 @@ public:
 
 private:
     // Drive the variable to `state`: a value sets it (overwriting), std::nullopt
-    // unsets it. Used for both the requested state and the restore.
+    // unsets it. Shared by the initial apply and the restore.
     void apply(const std::optional<std::string>& state) const {
         if (state.has_value()) {
             ::setenv(name_.c_str(), state->c_str(), 1 /*overwrite*/);

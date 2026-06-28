@@ -20,10 +20,8 @@ namespace copyclip::storage {
 
 namespace {
 
-// --- JSON keys --------------------------------------------------------------
-// The object keys, named so no bare string literal appears in the read/write
-// logic. They match the reference module's dataclass field names verbatim, since
-// the reference serializes via dataclasses.asdict().
+// Named so no bare string literal appears in the logic; match the reference's
+// dataclass field names verbatim (it serializes via dataclasses.asdict()).
 constexpr const char* kKeyTheme = "theme";
 constexpr const char* kKeyHotkey = "hotkey";
 constexpr const char* kKeyFirstRunCompleted = "first_run_completed";
@@ -34,10 +32,9 @@ constexpr const char* kKeyAutoHideOnCopy = "auto_hide_on_copy";
 // json.dumps(..., indent=2).
 constexpr int kJsonIndent = 2;
 
-// Read the whole file at `path` into a string. Returns std::nullopt when the file
-// cannot be opened or a read error occurs, so the caller can warn and fall back to
-// defaults rather than acting on partial data. The stream closes via RAII on every
-// path out.
+// Reads the whole file into a string; std::nullopt if it cannot be opened or a
+// read error occurs, so the caller falls back to defaults rather than acting on
+// partial data.
 [[nodiscard]] std::optional<std::string> read_file(const std::filesystem::path& path) {
     std::ifstream stream{path, std::ios::binary};
     if (!stream) {
@@ -50,13 +47,11 @@ constexpr int kJsonIndent = 2;
     return contents;
 }
 
-// Build a Settings from a parsed JSON object, applying per-field fallback for
-// missing keys (j.value(key, default), mirroring the reference's data.get(key,
-// default)). A present-but-malformed field aborts the conversion: an invalid
-// enumerator makes <enum>_from_string return std::nullopt and a wrong JSON type
-// makes nlohmann throw; either way the caller treats the file as corrupt and
-// returns defaults. Returns std::nullopt for the invalid-enumerator case; nlohmann
-// type errors propagate as exceptions to the caller's catch.
+// Builds Settings from parsed JSON, with per-field fallback for missing keys
+// (mirroring the reference's data.get(key, default)). A present-but-malformed
+// field instead aborts to defaults — diverging from the reference: an invalid
+// enumerator returns std::nullopt here, while a wrong JSON type makes nlohmann
+// throw and propagates to the caller's catch.
 [[nodiscard]] std::optional<core::Settings> settings_from_json(const nlohmann::json& json) {
     const core::Settings defaults{};
 

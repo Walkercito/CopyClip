@@ -1,20 +1,19 @@
 #pragma once
 
-// X11 global hotkey via a targeted XGrabKey on the root window (no system-wide
-// keylogger). Mirrors the reference adapters/hotkeys/x11.py.
+// X11 global hotkey via a targeted XGrabKey on the root window (not a
+// system-wide keylogger). Mirrors the reference adapters/hotkeys/x11.py.
 //
-// Construction opens the X display and throws if none is available, so the
-// factory can fall back to the manual listener. start() grabs the combination
-// (with the NumLock/CapsLock variants) and watches for it on a background
-// thread; the thread shuts down promptly via a poll() loop over the X
-// connection driven by the jthread stop token.
+// Construction opens the X display and throws if none is available, letting the
+// factory fall back to the manual listener. start() grabs the combo (plus its
+// NumLock/CapsLock variants) and serves events on a background thread that shuts
+// down promptly via a poll() loop driven by the jthread stop token — cleaner
+// than the reference's close-the-display approach.
 //
 // MANUAL VERIFICATION: the grab + event loop need a real X server and physical
-// key presses, so they are exercised by hand on an X11 session (press the combo
-// -> the activation fires). Only the pure modifiers_to_mask() seam below is unit
-// tested. Xlib is accessed from the constructing thread (grab) and the serve
-// thread (event read); XInitThreads() is requested to enable Xlib's internal
-// locking for that low-contention pattern.
+// key presses, so they are verified by hand (press the combo -> activation
+// fires); only the pure modifiers_to_mask() seam is unit tested. Xlib is touched
+// from the constructing thread (grab) and the serve thread (event read), so
+// XInitThreads() is requested (best-effort) to enable Xlib's internal locking.
 
 #include "adapters/X11Modifiers.hpp"
 #include "core/Interfaces.hpp"

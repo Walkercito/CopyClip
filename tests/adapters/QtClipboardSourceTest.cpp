@@ -36,6 +36,7 @@ TEST(QtClipboardSourceTest, DataChangedInvokesCallback) {
 
 } // namespace
 
+// Custom main(): QtClipboardSource needs a live QGuiApplication for the whole run.
 int main(int argc, char** argv) {
     qputenv("QT_QPA_PLATFORM", "offscreen");
     const QGuiApplication app(argc, argv);

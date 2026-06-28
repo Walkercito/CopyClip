@@ -1,12 +1,9 @@
 // Port of the reference oracle tests/core/test_interfaces.py.
 //
-// The Python reference uses runtime_checkable Protocols and asserts each fake
-// satisfies its seam via isinstance(...). The C++ port expresses the same
-// relationship at COMPILE TIME: each fake is checked to publicly derive from the
-// abstract interface it implements with static_assert(std::derived_from<...>).
-// A small runtime case then binds each fake to a base-class reference and
-// exercises one call through the seam, so the suite has a runnable case and the
-// polymorphic dispatch is verified end to end.
+// Where the reference asserts isinstance against runtime_checkable Protocols, the
+// C++ port checks the same relationship at COMPILE TIME via
+// static_assert(std::derived_from<...>). Runtime cases then bind each fake to a
+// base reference and exercise one call, verifying virtual dispatch end to end.
 
 #include "core/Interfaces.hpp"
 #include "core/Enums.hpp"
@@ -25,26 +22,23 @@ namespace {
 namespace core = copyclip::core;
 namespace testing = copyclip::testing;
 
-// test_fakes_satisfy_protocols (compile-time half): each in-memory fake must be
-// a concrete implementation of its abstract seam. std::derived_from is the
-// idiomatic compile-time replacement for Python's isinstance against a
-// runtime_checkable Protocol.
+// Compile-time half: each fake must concretely implement its abstract seam.
+// std::derived_from replaces Python's isinstance against a Protocol.
 static_assert(std::derived_from<testing::FakeClock, core::Clock>);
 static_assert(std::derived_from<testing::FakeClipboardSource, core::ClipboardSource>);
 static_assert(std::derived_from<testing::FakeHotkeyListener, core::HotkeyListener>);
 static_assert(std::derived_from<testing::InMemoryHistoryRepository, core::HistoryRepository>);
 static_assert(std::derived_from<testing::InMemorySettingsRepository, core::SettingsRepository>);
 
-// The seams are pure interfaces: no fake may be sliceable through the base, and
-// the bases carry no state. Confirm the interfaces are abstract.
+// The seams are pure interfaces carrying no state — confirm they are abstract.
 static_assert(std::is_abstract_v<core::Clock>);
 static_assert(std::is_abstract_v<core::ClipboardSource>);
 static_assert(std::is_abstract_v<core::HotkeyListener>);
 static_assert(std::is_abstract_v<core::HistoryRepository>);
 static_assert(std::is_abstract_v<core::SettingsRepository>);
 
-// Runtime half: bind each fake to a reference of its abstract base and exercise
-// one call through the seam, proving virtual dispatch reaches the fake.
+// Runtime half: bind each fake to its abstract base and exercise one call,
+// proving virtual dispatch reaches the fake.
 TEST(InterfacesTest, ClockSeamDispatchesToFake) {
     const auto moment = std::chrono::system_clock::time_point{std::chrono::seconds{1000}};
     testing::FakeClock fake{moment};
@@ -64,10 +58,9 @@ TEST(InterfacesTest, HotkeyListenerSeamDispatchesToFake) {
     core::HotkeyListener& seam = fake;
     const core::HotkeySpec spec{.modifiers = {core::Modifier::Super}, .key = core::Key::V};
     EXPECT_TRUE(seam.rebind(spec));
-    // HotkeySpec has no operator==; assert the stored spec is engaged and its
-    // observable label matches what was bound. A plain has_value() guard (which
-    // the optional-access analysis models, unlike GoogleTest's ASSERT_* macros)
-    // makes the dereference provably safe; the else branch fails the test.
+    // HotkeySpec has no operator==, so assert via its label. The has_value() guard
+    // (which the optional-access analysis models, unlike ASSERT_*) makes the
+    // dereference provably safe; the else branch fails the test.
     if (fake.spec.has_value()) {
         EXPECT_EQ(fake.spec->display_name(), "Super+V");
     } else {

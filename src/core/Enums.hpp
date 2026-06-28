@@ -2,22 +2,12 @@
 
 // Domain enumerations and their string representations.
 //
-// Mirrors the reference module copyclip/core/enums.py, where each type is a
-// Python StrEnum: an enumerator *is* its string value, and `E(value)`
-// constructs from a string (raising on an unknown value). The C++ port keeps
-// the same string values — Models::HotkeySpec::display_name and the
-// storage/settings layers depend on them — but expresses the mapping idiomatically:
-//
-//   - `enum class` (never plain enum), enumerators in PascalCase.
-//   - to_string(E)            -> std::string_view : the StrEnum value.
-//   - <enum>_from_string(sv)  -> std::optional<E> : parses a value, returning
-//                                std::nullopt for an unknown one (the C++
-//                                replacement for StrEnum raising).
-//
-// Each enum has exactly one source of truth — a constexpr table of
-// {enumerator, value} pairs — consumed by both directions, so the two never
-// diverge and no string literal is repeated in logic. Pure, header-only, and
-// free of Qt/Xlib/D-Bus: this lives in the core layer.
+// Mirrors copyclip/core/enums.py (Python StrEnum, where an enumerator *is* its
+// string value). The string values must match the reference: HotkeySpec::
+// display_name and the storage/settings layers depend on them. Each enum has a
+// single constexpr {enumerator, value} table feeding both to_string (the value)
+// and <enum>_from_string (parse, std::nullopt on miss — replacing StrEnum's
+// raise), so the mapping never diverges and no literal is repeated in logic.
 
 #include <array>
 #include <cstddef>
@@ -27,10 +17,8 @@
 
 namespace copyclip::core {
 
-// --- Enumerations ------------------------------------------------------------
-//
-// Each value set is tiny, so the enums are sized to a single byte; the explicit
-// underlying type also fixes the representation across translation units.
+// Each value set is tiny, so the enums use a single-byte underlying type; the
+// explicit type also fixes the representation across translation units.
 
 enum class SessionType : std::uint8_t { X11, Wayland, Unknown };
 
@@ -42,22 +30,17 @@ enum class Theme : std::uint8_t { Dark, Light, System };
 
 enum class HotkeyPreset : std::uint8_t { SuperV, CtrlAltV, SuperC, CtrlShiftV };
 
-// --- Mapping machinery -------------------------------------------------------
-
 namespace detail {
 
-// One {enumerator, string value} pair. `Enum` is the scoped enum; the value is a
-// view over a string literal with static storage duration, so it outlives any
-// caller.
+// One {enumerator, value} pair. `text` views a string literal (static storage),
+// so it outlives any caller.
 template <typename Enum> struct EnumEntry {
     Enum value;
     std::string_view text;
 };
 
-// Maps an enumerator to its string value by scanning the enum's single source
-// of truth. Every enumerator appears in its table, so the lookup always
-// succeeds; the trailing return covers the (unreachable) miss without a magic
-// sentinel string.
+// Every enumerator appears in its table, so this always finds a match; the
+// trailing return covers the unreachable miss without a magic sentinel.
 template <typename Enum, std::size_t N>
 [[nodiscard]] constexpr std::string_view
 to_string_impl(Enum value, const std::array<EnumEntry<Enum>, N>& table) {
@@ -69,9 +52,7 @@ to_string_impl(Enum value, const std::array<EnumEntry<Enum>, N>& table) {
     return {};
 }
 
-// Parses a string into an enumerator, returning std::nullopt when no entry
-// matches. This is the idiomatic replacement for StrEnum's exception on an
-// unknown value.
+// Returns std::nullopt when no entry matches (replacing StrEnum's raise).
 template <typename Enum, std::size_t N>
 [[nodiscard]] constexpr std::optional<Enum>
 from_string_impl(std::string_view text, const std::array<EnumEntry<Enum>, N>& table) {
@@ -83,8 +64,8 @@ from_string_impl(std::string_view text, const std::array<EnumEntry<Enum>, N>& ta
     return std::nullopt;
 }
 
-// Single source of truth per enum: the enumerator<->value correspondence used by
-// both to_string and from_string. Order matches the reference declarations.
+// Single source of truth per enum, feeding both to_string and from_string.
+// Order matches the reference declarations.
 inline constexpr std::array<EnumEntry<SessionType>, 3> kSessionTypeTable{{
     {SessionType::X11, "x11"},
     {SessionType::Wayland, "wayland"},
@@ -120,8 +101,6 @@ inline constexpr std::array<EnumEntry<HotkeyPreset>, 4> kHotkeyPresetTable{{
 
 } // namespace detail
 
-// --- to_string overloads -----------------------------------------------------
-
 [[nodiscard]] constexpr std::string_view to_string(SessionType value) {
     return detail::to_string_impl(value, detail::kSessionTypeTable);
 }
@@ -141,8 +120,6 @@ inline constexpr std::array<EnumEntry<HotkeyPreset>, 4> kHotkeyPresetTable{{
 [[nodiscard]] constexpr std::string_view to_string(HotkeyPreset value) {
     return detail::to_string_impl(value, detail::kHotkeyPresetTable);
 }
-
-// --- from_string functions ---------------------------------------------------
 
 [[nodiscard]] constexpr std::optional<SessionType> session_type_from_string(std::string_view text) {
     return detail::from_string_impl(text, detail::kSessionTypeTable);

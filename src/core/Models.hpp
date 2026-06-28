@@ -1,23 +1,14 @@
 #pragma once
 
-// Immutable value objects for the engine's domain.
+// Value objects for the engine's domain. Mirrors copyclip/core/models.py
+// (frozen dataclasses); C++ has no runtime frozen guard, so these are plain
+// value types — immutability is convention, not enforced. Members are public
+// and non-const so the types stay fully copyable/movable (Rule of Zero): const
+// members would suppress the move/copy that std::vector and sort need (C.12).
 //
-// Mirrors the reference module copyclip/core/models.py, where each type is a
-// @dataclass(frozen=True): a fixed set of fields with documented defaults.
-// Python's frozen=True raises on attribute assignment; that runtime guard has
-// no compile-time C++ equivalent, so these are plain value types — fully
-// copyable/movable (Rule of Zero) so they can live in std::vector and be sorted
-// — and immutability is a convention, not an enforced invariant. Members are
-// deliberately public (entries are reconstructed, never mutated in place) and
-// non-const, since const members would suppress the move/copy these containers
-// need (C.12).
-//
-// HotkeySpec::display_name reproduces the reference property exactly: each
-// modifier's string value is Title-cased and the key's string value is fully
-// upper-cased, joined by '+'. It is built from to_string(Modifier)/to_string(Key)
-// (core/Enums.hpp) plus small ASCII case helpers, so the enum<->string mapping
-// is never duplicated. Pure, header-only, and free of Qt/Xlib/D-Bus: this lives
-// in the core layer.
+// HotkeySpec::display_name mirrors the reference property: each modifier Title-
+// cased, the key fully UPPER-cased, joined by '+'. It reuses to_string + ascii_*
+// so the enum<->string mapping is never duplicated.
 
 #include "config/Constants.hpp"
 #include "core/Enums.hpp"
@@ -30,16 +21,15 @@
 
 namespace copyclip::core {
 
-// A single captured clipboard item. `content` is the text; `created_at` is when
-// it entered the history; `pinned` marks items kept across eviction.
+// A captured clipboard item. `pinned` marks entries kept across eviction.
 struct ClipboardEntry {
     std::string content;
     std::chrono::system_clock::time_point created_at;
     bool pinned = false;
 };
 
-// A hotkey: an ordered set of modifiers plus a single key. display_name() is the
-// human-readable label, e.g. {Ctrl, Alt} + V -> "Ctrl+Alt+V".
+// A hotkey: an ordered list of modifiers plus one key. The order drives
+// display_name(), e.g. {Ctrl, Alt} + V -> "Ctrl+Alt+V".
 struct HotkeySpec {
     std::vector<Modifier> modifiers;
     Key key;
@@ -56,7 +46,7 @@ struct HotkeySpec {
     }
 };
 
-// User-configurable application settings, with the reference defaults.
+// User-configurable settings; defaults match the reference.
 struct Settings {
     Theme theme = Theme::Dark;
     HotkeyPreset hotkey = HotkeyPreset::SuperV;

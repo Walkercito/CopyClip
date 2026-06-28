@@ -12,17 +12,14 @@ namespace copyclip::core {
 
 namespace {
 
-// Environment variables consulted by detect_session, named so no magic string
-// appears in the logic below. Stored as std::string_view over string literals
-// with static storage duration; .data() yields the NUL-terminated C string
-// getenv requires.
+// Named to keep magic strings out of the logic. string_view over a static
+// literal: .data() is NUL-terminated, as getenv requires.
 inline constexpr std::string_view kXdgSessionTypeEnv = "XDG_SESSION_TYPE";
 inline constexpr std::string_view kWaylandDisplayEnv = "WAYLAND_DISPLAY";
 inline constexpr std::string_view kDisplayEnv = "DISPLAY";
 
-// Read an environment variable, returning std::nullopt when it is unset. An
-// empty value is reported as an empty string (the caller decides whether empty
-// counts as "set").
+// nullopt when unset; an empty value reads back as an empty string (callers
+// decide whether empty counts as "set").
 [[nodiscard]] std::optional<std::string_view> env_value(std::string_view name) {
     if (const char* raw = std::getenv(name.data()); raw != nullptr) {
         return std::string_view{raw};
@@ -30,9 +27,8 @@ inline constexpr std::string_view kDisplayEnv = "DISPLAY";
     return std::nullopt;
 }
 
-// Whether an environment variable is set to a non-empty value. Mirrors the
-// reference's truthiness check (`os.environ.get(var)` is falsy when unset or
-// empty).
+// Set to a non-empty value — mirrors the reference truthiness check
+// (`os.environ.get(var)` is falsy when unset or empty).
 [[nodiscard]] bool env_is_set_nonempty(std::string_view name) {
     const std::optional<std::string_view> value = env_value(name);
     return value.has_value() && !value->empty();

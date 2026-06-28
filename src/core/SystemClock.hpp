@@ -1,8 +1,6 @@
 #pragma once
 
-// The production Clock: reports the real wall-clock time. Injected wherever a
-// Clock seam is needed (e.g. HistoryService) so that tests can substitute a
-// FakeClock. Pure core layer — no Qt, Xlib, or D-Bus.
+// The production Clock: real wall-clock time. Tests substitute a FakeClock.
 
 #include "core/Interfaces.hpp"
 

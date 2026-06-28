@@ -1,14 +1,10 @@
 // Port of the reference oracle tests/core/test_enums.py.
 //
-// The Python reference uses StrEnum, so an enumerator *is* its string value and
-// `E(value)` constructs from a string (raising on an unknown value). The C++
-// port models this with `enum class` plus two free functions per enum:
-//   - to_string(E)          -> std::string_view   (the StrEnum value)
-//   - <enum>_from_string(s) -> std::optional<E>    (idiomatic replacement for
-//                                                   E(value); nullopt on miss)
-//
-// These cases assert the exact string values, the from_string round-trip, and
-// that an unknown value yields std::nullopt.
+// The Python reference uses StrEnum, so each enumerator *is* its string value and
+// E(value) constructs from one. The C++ port models this with `enum class` plus
+// two free functions per enum: to_string(E) yields the StrEnum value, and
+// <enum>_from_string(s) returns std::optional<E> (nullopt replaces the raise).
+// These cases assert the values, the round-trip, and nullopt on unknown input.
 
 #include "core/Enums.hpp"
 
@@ -21,19 +17,18 @@ namespace {
 
 namespace core = copyclip::core;
 
-// DRY round-trip check: for a known value, from_string must recover the
-// enumerator and to_string must reproduce the same value. `parse` is the
-// per-enum from_string function (passed as a callable so one helper covers all
-// five enums without copy-paste).
+// DRY round-trip check covering all five enums: to_string reproduces the value
+// and from_string recovers the enumerator. `parse` is the per-enum from_string,
+// passed as a callable so one helper serves every enum.
 template <typename Enum, typename Parse>
 void expect_round_trip(Enum value, std::string_view text, Parse parse) {
     EXPECT_EQ(core::to_string(value), text);
-    // Compare optionals directly: this checks both engagement and the contained
-    // value in one assertion, with no dereference of a possibly-empty optional.
+    // Compare optionals directly: checks engagement and value at once, with no
+    // dereference of a possibly-empty optional.
     EXPECT_EQ(parse(text), std::optional<Enum>{value});
 }
 
-// test_enums_are_string_valued (the to_string half) — exact StrEnum values.
+// to_string half: the exact StrEnum values.
 TEST(EnumsTest, ToStringMatchesReferenceValues) {
     EXPECT_EQ(core::to_string(core::SessionType::X11), "x11");
     EXPECT_EQ(core::to_string(core::SessionType::Wayland), "wayland");
@@ -59,8 +54,7 @@ TEST(EnumsTest, ToStringMatchesReferenceValues) {
     EXPECT_EQ(core::to_string(core::HotkeyPreset::CtrlShiftV), "ctrl_shift_v");
 }
 
-// test_session_type_membership + the full from_string round-trip for every
-// enumerator (mirrors StrEnum's value<->member correspondence).
+// from_string round-trip for every enumerator (StrEnum's value<->member map).
 TEST(EnumsTest, FromStringRoundTripsEveryEnumerator) {
     expect_round_trip(core::SessionType::X11, "x11", core::session_type_from_string);
     expect_round_trip(core::SessionType::Wayland, "wayland", core::session_type_from_string);
@@ -87,9 +81,8 @@ TEST(EnumsTest, FromStringRoundTripsEveryEnumerator) {
                       core::hotkey_preset_from_string);
 }
 
-// Unknown values yield std::nullopt — the C++ replacement for StrEnum raising on
-// an unrecognized value. Covered across all five enums, including empty input
-// and a near-miss that differs only in case.
+// Unknown values yield std::nullopt — the replacement for StrEnum's raise.
+// Covers all five enums, plus empty input and a case-only near-miss.
 TEST(EnumsTest, FromStringReturnsNulloptForUnknownValue) {
     EXPECT_FALSE(core::session_type_from_string("mir").has_value());
     EXPECT_FALSE(core::session_type_from_string("X11").has_value());

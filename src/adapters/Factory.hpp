@@ -1,12 +1,12 @@
 #pragma once
 
 // Builds the concrete adapters for the detected session, with safe fallbacks.
+// Mirrors the reference adapters/factory.py.
 //
-// Mirrors the reference adapters/factory.py. Builders are injected (defaulting
-// to the real adapters) so the selection logic is testable without pulling in
-// Qt or Xlib. This header is deliberately free of any Qt/Xlib include: the
-// concrete adapters are referenced only in Factory.cpp, so a test (or any
-// consumer) can include this header alongside <gtest/gtest.h> safely.
+// Builders are injected (defaulting to the real adapters) so the selection logic
+// is testable without Qt or Xlib. The header stays Qt/Xlib-free — the concrete
+// adapters are referenced only in Factory.cpp — so a test can include it
+// alongside <gtest/gtest.h>.
 
 #include "core/Enums.hpp"
 #include "core/Interfaces.hpp"

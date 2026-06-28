@@ -20,9 +20,9 @@ namespace {
 // How long the accept loop blocks in poll() before re-checking the stop token.
 constexpr int kPollTimeoutMs = 100;
 
-// The POSIX socket API takes a generic sockaddr*; reinterpreting the concrete
-// sockaddr_un is the standard, unavoidable idiom. Confined to one helper so the
-// suppression lives in exactly one place.
+// The socket API takes a generic sockaddr*; reinterpreting the concrete
+// sockaddr_un is the standard idiom, confined here so the suppression lives in one
+// place.
 const sockaddr* as_sockaddr(const sockaddr_un& addr) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     return reinterpret_cast<const sockaddr*>(&addr);
@@ -66,9 +66,9 @@ bool SingleInstanceGuard::acquire(std::function<void()> on_show) {
     }
 
     if (::bind(server.get(), as_sockaddr(addr), addr_len) != 0) {
-        // The bind failed because the socket file already exists. If nothing is
-        // listening on it, a previous instance crashed without cleaning up:
-        // reclaim the stale file and try once more with a fresh socket.
+        // bind failed because the socket file exists. If nothing is listening, a
+        // previous instance crashed without cleaning up: reclaim the stale file
+        // and retry with a fresh socket.
         if (!is_stale()) {
             return false;
         }

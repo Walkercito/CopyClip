@@ -1,12 +1,11 @@
 #pragma once
 
-// Clipboard source backed by Qt's QClipboard — event-driven on both X11 and
-// Wayland. Mirrors the reference adapters/clipboard/qt.py.
+// Clipboard source backed by QClipboard (event-driven on X11 and Wayland).
+// Mirrors the reference adapters/clipboard/qt.py.
 //
-// Requires a QGuiApplication to exist before construction (the clipboard is
-// owned by the GUI application). Part of the impure adapters layer; links
-// Qt6::Gui. The dataChanged subscription is a non-QObject connection, torn down
-// in stop() and the destructor.
+// Requires a QGuiApplication before construction (it owns the clipboard). The
+// dataChanged subscription is a non-QObject connection, torn down in stop() and
+// the destructor.
 
 #include "core/Interfaces.hpp"
 

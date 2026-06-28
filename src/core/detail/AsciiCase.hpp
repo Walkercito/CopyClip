@@ -1,19 +1,14 @@
 #pragma once
 
-// Locale-independent ASCII letter case folding, shared within the core layer.
-//
-// Works on char throughout — avoiding the int round-trip and unsigned-char casts
-// that std::toupper/std::tolower require — and is -Wconversion-safe. Only A-Z /
-// a-z are folded; every other byte (including non-ASCII) passes through
-// unchanged. Used by HotkeySpec::display_name (Models) and detect_session
-// (Platform), so the folding logic lives in exactly one place.
+// Locale-independent ASCII case folding. Works on char throughout — avoiding
+// the int round-trip and unsigned-char casts std::toupper/tolower require, and
+// staying -Wconversion-safe. Only A-Z/a-z fold; every other byte passes through.
 
 #include <string>
 #include <string_view>
 
 namespace copyclip::core::detail {
 
-// Distance between an uppercase ASCII letter and its lowercase counterpart.
 inline constexpr char kAsciiCaseGap = 'a' - 'A';
 
 [[nodiscard]] constexpr char ascii_to_upper(char ch) {
@@ -24,8 +19,7 @@ inline constexpr char kAsciiCaseGap = 'a' - 'A';
     return (ch >= 'A' && ch <= 'Z') ? static_cast<char>(ch + kAsciiCaseGap) : ch;
 }
 
-// Fully upper-cases an ASCII view (the key half of display_name: "space" ->
-// "SPACE").
+// Upper-cases an ASCII view (display_name's key half: "space" -> "SPACE").
 [[nodiscard]] inline std::string ascii_upper(std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -35,7 +29,7 @@ inline constexpr char kAsciiCaseGap = 'a' - 'A';
     return result;
 }
 
-// Fully lower-cases an ASCII view, matching Python str.lower() for ASCII input.
+// Lower-cases an ASCII view (matches Python str.lower() for ASCII input).
 [[nodiscard]] inline std::string ascii_lower(std::string_view text) {
     std::string result;
     result.reserve(text.size());
@@ -45,9 +39,8 @@ inline constexpr char kAsciiCaseGap = 'a' - 'A';
     return result;
 }
 
-// Title-cases an ASCII view: first character upper, the rest lower (mirrors
-// Python str.capitalize() for the modifier half: "ctrl" -> "Ctrl"). An empty
-// view yields an empty string.
+// Title-cases an ASCII view: first char upper, rest lower (Python
+// str.capitalize(), display_name's modifier half: "ctrl" -> "Ctrl").
 [[nodiscard]] inline std::string ascii_capitalize(std::string_view text) {
     std::string result;
     result.reserve(text.size());

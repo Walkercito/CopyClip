@@ -14,11 +14,10 @@ namespace copyclip::core {
 
 namespace {
 
-// The single source of truth: every preset paired with its spec, in
-// HotkeyPreset declaration order. Mirrors the reference _PRESETS dict exactly.
-// Both get_spec and all_presets read this table, so the mapping is never
-// duplicated. The HotkeySpec modifier lists own their storage, so the catalog is
-// built once at first use rather than being a compile-time constant.
+// Single source of truth for the preset -> spec mapping, in HotkeyPreset
+// declaration order (reference _PRESETS). HotkeySpec's modifier lists own their
+// storage, so the catalog is a function-local static built once at first use,
+// not a compile-time constant.
 [[nodiscard]] const std::array<std::pair<HotkeyPreset, HotkeySpec>, 4>& catalog() {
     static const std::array<std::pair<HotkeyPreset, HotkeySpec>, 4> presets{{
         {HotkeyPreset::SuperV, HotkeySpec{.modifiers = {Modifier::Super}, .key = Key::V}},

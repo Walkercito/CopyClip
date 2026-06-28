@@ -18,10 +18,9 @@ namespace copyclip::storage {
 
 namespace {
 
-// --- SQL --------------------------------------------------------------------
-// The schema and statements, named so no bare SQL literal appears in the logic.
-// `content` is the primary key (INSERT OR REPLACE upserts by content); pinned is
-// stored as 0/1. Mirrors the reference module's _SCHEMA and statements verbatim.
+// Named so no bare SQL literal appears in the logic; mirrors the reference's
+// _SCHEMA and statements. `content` is the primary key, so INSERT OR REPLACE
+// upserts by content; pinned is stored as 0/1.
 constexpr const char* kSchema = "CREATE TABLE IF NOT EXISTS entries ("
                                 "content    TEXT PRIMARY KEY, "
                                 "created_at TEXT NOT NULL, "
@@ -48,18 +47,12 @@ constexpr int kParamThird = 3;
 constexpr int kPinnedTrue = 1;
 constexpr int kPinnedFalse = 0;
 
-// --- ISO-8601 timestamp round-trip ------------------------------------------
-// created_at is a system_clock::time_point stored as ISO-8601 TEXT, mirroring the
-// reference's datetime.isoformat()/fromisoformat(). system_clock on this
-// toolchain (GCC 13 / libstdc++) ticks in nanoseconds, and std::format with
-// "{:%FT%T}" emits the full sub-second field, so the text carries every tick:
-// the round-trip is exact.
-//
-// Reading back must reconstruct that exact time_point. libstdc++ 13 does not yet
-// implement std::chrono::from_stream/parse for sys_time (the headers mark it
-// "// TODO"), so a small hand-rolled ISO-8601 parser is used instead. It is
-// locale-independent, -Wconversion-safe, and reports failure via std::optional so
-// the caller can raise rather than silently accepting garbage.
+// created_at round-trips as ISO-8601 TEXT, mirroring the reference's
+// isoformat()/fromisoformat(). std::format "{:%FT%T}" emits the full nanosecond
+// subsecond field, so the round-trip is lossless. libstdc++ 13 lacks
+// std::chrono::from_stream for sys_time, so reading back uses a hand-rolled
+// parser: locale-independent, -Wconversion-safe, and reporting failure via
+// std::optional rather than silently accepting garbage.
 
 // Number of decimal digits std::format emits for the nanosecond subsecond field.
 constexpr std::size_t kSubsecondDigits = 9;
@@ -75,10 +68,9 @@ constexpr std::size_t kTwoDigits = 2;
 // Decimal radix for the digit accumulation below.
 constexpr long long kRadix = 10;
 
-// Parse exactly `count` decimal digits starting at `pos`, advancing `pos` on
-// success. Accumulates digit by digit (no pointer arithmetic, locale-independent)
-// and returns std::nullopt if there are too few characters or a non-digit is
-// encountered.
+// Parses exactly `count` decimal digits at `pos`, advancing `pos` on success;
+// std::nullopt on too few characters or a non-digit. Locale-independent by
+// accumulating digit by digit.
 [[nodiscard]] std::optional<long long> parse_digits(std::string_view text, std::size_t& pos,
                                                     std::size_t count) {
     if (count > text.size() - pos) {
@@ -105,9 +97,9 @@ constexpr long long kRadix = 10;
     return true;
 }
 
-// Parse "YYYY-MM-DDTHH:MM:SS[.fffffffff]" back into a system_clock::time_point.
-// The fractional part is optional and right-padded to nanoseconds so any emitted
-// precision round-trips. Returns std::nullopt on any malformed field.
+// Parses "YYYY-MM-DDTHH:MM:SS[.fffffffff]" back into a time_point. The fractional
+// part is optional and right-padded to nanoseconds so any emitted precision
+// round-trips. std::nullopt on any malformed field.
 [[nodiscard]] std::optional<std::chrono::system_clock::time_point>
 parse_iso8601(std::string_view text) {
     std::size_t pos = 0;

@@ -12,10 +12,9 @@ namespace copyclip::runtime {
 
 namespace {
 
-// spdlog rendering of the reference's "%(asctime)s %(levelname)-7s %(name)s:
-// %(message)s" format: timestamp with milliseconds, the level left-padded to 7,
-// the logger name, then the message. (spdlog renders level names in lower case
-// by its own convention; the structure otherwise matches the reference.)
+// spdlog equivalent of the reference's "%(asctime)s %(levelname)-7s %(name)s:
+// %(message)s": ms timestamp, level left-padded to 7, name, message. (spdlog
+// lower-cases level names by convention; structure otherwise matches.)
 constexpr std::string_view kLogPattern{"%Y-%m-%d %H:%M:%S,%e %^%-7l%$ %n: %v"};
 
 } // namespace

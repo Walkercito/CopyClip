@@ -1,10 +1,8 @@
 // Port of the reference oracle tests/core/test_models.py.
 //
-// Models.hpp holds the engine's immutable value objects. The Python reference
-// uses @dataclass(frozen=True): a fixed set of fields with documented defaults.
-// The frozen/"raises on set" behavior is a Python-ism with no compile-time C++
-// equivalent, so these cases assert what does translate — the default field
-// values and the HotkeySpec::display_name formatting contract.
+// The reference uses @dataclass(frozen=True). The frozen/"raises on set" behavior
+// has no compile-time C++ equivalent, so these cases assert what does translate:
+// the default field values and the HotkeySpec::display_name formatting contract.
 
 #include "core/Models.hpp"
 #include "config/Constants.hpp"
@@ -19,8 +17,7 @@ namespace {
 namespace core = copyclip::core;
 namespace config = copyclip::config;
 
-// test_clipboard_entry_is_frozen (default-value half): a fresh entry is not
-// pinned. The Python "assignment raises" check has no C++ analogue.
+// A fresh entry is not pinned; Python's "assignment raises" check has no analogue.
 TEST(ModelsTest, ClipboardEntryDefaultsToUnpinned) {
     const core::ClipboardEntry entry{
         .content = "hi", .created_at = std::chrono::system_clock::time_point{}, .pinned = {}};
@@ -28,8 +25,7 @@ TEST(ModelsTest, ClipboardEntryDefaultsToUnpinned) {
     EXPECT_FALSE(entry.pinned);
 }
 
-// test_hotkey_spec_display_name: each modifier's value is Title-cased and the
-// key's value is fully upper-cased, joined by '+'.
+// display_name(): each modifier Title-cased, the key fully upper-cased, '+'-joined.
 TEST(ModelsTest, DisplayNameTitleCasesModifiersAndUppercasesKey) {
     const core::HotkeySpec spec{.modifiers = {core::Modifier::Ctrl, core::Modifier::Alt},
                                 .key = core::Key::V};
@@ -48,8 +44,8 @@ TEST(ModelsTest, DisplayNameUppercasesMultiCharacterKey) {
     EXPECT_EQ(spec.display_name(), "Super+SPACE");
 }
 
-// test_settings_defaults: a default-constructed Settings mirrors the reference
-// defaults, including max_history_items bound to the shared config constant.
+// A default-constructed Settings mirrors the reference defaults, including
+// max_history_items bound to the shared config constant.
 TEST(ModelsTest, SettingsHaveReferenceDefaults) {
     const core::Settings settings{};
     EXPECT_EQ(settings.theme, core::Theme::Dark);

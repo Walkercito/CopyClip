@@ -1,10 +1,9 @@
 // Port of the reference oracle tests/core/test_platform.py.
 //
-// detect_session() reads three environment variables — XDG_SESSION_TYPE,
-// WAYLAND_DISPLAY, DISPLAY — to classify the display server. The host or CI may
-// already have any of these set, so each case brings ALL THREE to a known state
-// via ScopedEnv (set or unset, restored on scope exit) before asserting; this
-// makes the tests deterministic regardless of the ambient environment.
+// detect_session() classifies the display server from three env vars
+// (XDG_SESSION_TYPE, WAYLAND_DISPLAY, DISPLAY). The host or CI may already set any
+// of them, so each case pins ALL THREE via ScopedEnv before asserting, making the
+// result deterministic regardless of the ambient environment.
 
 #include "core/Platform.hpp"
 #include "core/Enums.hpp"
@@ -20,26 +19,19 @@ namespace {
 namespace core = copyclip::core;
 using copyclip::test::ScopedEnv;
 
-// Desired state of the three session-detection variables for a single test. A
-// field holding a value sets that variable; std::nullopt unsets it. A named
-// struct with designated initializers makes each variable's state explicit at the
-// call site — the three states share a type, so positional arguments would be
-// trivially swappable; naming them removes that hazard entirely.
+// Desired state of the three session-detection variables: a value sets the
+// variable, std::nullopt unsets it. Designated initializers name each at the call
+// site, so the three same-typed states cannot be swapped by accident.
 struct SessionEnv {
     std::optional<std::string> xdg_session_type;
     std::optional<std::string> wayland_display;
     std::optional<std::string> display;
 };
 
-// Fixture: pins the three session-detection variables for the lifetime of each
-// test, then restores the prior environment on teardown. This keeps the
-// per-variable wiring DRY across cases — no test re-states the variable names —
-// and guarantees a clean, known starting point regardless of the host.
-//
-// Each guard lives in its own std::optional member rather than a vector:
-// ScopedEnv is deliberately non-movable (moving an RAII env override risks a
-// double restore), so emplacing in place avoids any relocation while preserving
-// deterministic reverse-declaration teardown.
+// Fixture: pins the three variables for each test (DRY — no case re-states their
+// names) and restores the prior environment on teardown. Each guard lives in its
+// own std::optional member rather than a vector because ScopedEnv is non-movable
+// (moving an env override risks a double restore), so emplacing avoids relocation.
 class PlatformTest : public ::testing::Test {
 protected:
     void pin(const SessionEnv& env) {
@@ -54,7 +46,7 @@ private:
     std::optional<ScopedEnv> display_guard_;
 };
 
-// test_explicit_session_type_wins: declared wayland beats any display vars.
+// Declared wayland beats any display vars.
 TEST_F(PlatformTest, ExplicitWaylandSessionTypeWins) {
     pin({.xdg_session_type = "wayland", .wayland_display = "wayland-0", .display = ":0"});
     EXPECT_EQ(core::detect_session(), core::SessionType::Wayland);
@@ -73,8 +65,7 @@ TEST_F(PlatformTest, ExplicitSessionTypeIsCaseInsensitive) {
     EXPECT_EQ(core::detect_session(), core::SessionType::Wayland);
 }
 
-// test_falls_back_to_display_vars: no declared type, no WAYLAND_DISPLAY, DISPLAY
-// set -> X11.
+// No declared type, no WAYLAND_DISPLAY, DISPLAY set -> X11.
 TEST_F(PlatformTest, FallsBackToDisplayVars) {
     pin({.xdg_session_type = std::nullopt, .wayland_display = std::nullopt, .display = ":0"});
     EXPECT_EQ(core::detect_session(), core::SessionType::X11);
@@ -113,7 +104,7 @@ TEST_F(PlatformTest, EmptyDisplayIsIgnored) {
     EXPECT_EQ(core::detect_session(), core::SessionType::Unknown);
 }
 
-// test_unknown_when_nothing_set: all three unset -> Unknown.
+// All three unset -> Unknown.
 TEST_F(PlatformTest, UnknownWhenNothingSet) {
     pin({.xdg_session_type = std::nullopt,
          .wayland_display = std::nullopt,

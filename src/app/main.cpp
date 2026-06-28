@@ -1,11 +1,7 @@
-// CopyClip engine entry point — headless composition root.
-//
-// Mirrors the reference main.py: this runs the engine with no window. It wires
-// the QClipboard source, the session-appropriate hotkey listener, SQLite
-// history, and JSON settings, then logs clipboard captures and hotkey
-// activations. The single-instance guard is acquired BEFORE Qt is built, so a
-// second launch signals the running instance and exits without constructing a
-// QGuiApplication. The UI is a separate effort.
+// CopyClip engine entry point — headless composition root (mirrors the
+// reference main.py: the engine runs with no window; the UI is a separate
+// effort). The single-instance guard is acquired BEFORE Qt is built, so a second
+// launch signals the running instance and exits without a QGuiApplication.
 
 #include "adapters/Factory.hpp"
 #include "config/Constants.hpp"
@@ -56,6 +52,8 @@ int main(int argc, char** argv) {
         const std::unique_ptr<core::HotkeyListener> listener = adapters::select_hotkey_listener(
             core::detect_session(), core::get_spec(settings.settings().hotkey), "copyclip-show-ui");
 
+        // Declared last so it is destroyed first: the clipboard, listener,
+        // history, and settings it references all outlive it.
         core::ClipboardEngine engine{*clipboard, *listener, history, settings};
         engine.on_show_requested([] { spdlog::info("show requested (UI pending)"); });
         history.subscribe(

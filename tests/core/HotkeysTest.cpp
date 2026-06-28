@@ -1,10 +1,8 @@
 // Port of the reference oracle tests/core/test_hotkeys.py.
 //
-// Hotkeys.{hpp,cpp} is the catalog of supported hotkey presets as pure data
-// (no Xlib). The Python reference keeps a single dict _PRESETS, a DEFAULT_PRESET,
-// get_spec(preset), and all_presets(); these cases assert each piece translates:
-// every preset resolves to a well-formed spec, the SUPER_V mapping is exact,
-// kDefaultPreset is SuperV, and the catalog exposes all four presets.
+// Hotkeys is the catalog of supported presets as pure data (no Xlib). These cases
+// assert every preset resolves to a well-formed spec, the SUPER_V mapping is
+// exact, kDefaultPreset is SuperV, and the catalog exposes all four presets.
 
 #include "core/Hotkeys.hpp"
 #include "core/Enums.hpp"
@@ -21,7 +19,7 @@ namespace {
 namespace core = copyclip::core;
 
 // The closed set of presets under test, mirroring iteration over the Python
-// HotkeyPreset enum. Declared once so the cases below stay DRY.
+// HotkeyPreset enum. Declared once so the cases stay DRY.
 constexpr std::array<core::HotkeyPreset, 4> kAllPresetEnumerators{
     core::HotkeyPreset::SuperV,
     core::HotkeyPreset::CtrlAltV,
@@ -29,10 +27,8 @@ constexpr std::array<core::HotkeyPreset, 4> kAllPresetEnumerators{
     core::HotkeyPreset::CtrlShiftV,
 };
 
-// test_each_preset_maps_to_a_spec: every preset resolves to a spec whose key is
-// a valid enumerator and whose modifiers are all valid enumerators. In C++ the
-// enum is closed and type-safe, so "valid" reduces to "the spec is non-empty":
-// at least one modifier and a key that round-trips through to_string.
+// Every preset resolves to a spec. The enum is closed and type-safe, so "valid"
+// reduces to "non-empty": at least one modifier and a key with a string form.
 TEST(HotkeysTest, EachPresetMapsToASpec) {
     for (const core::HotkeyPreset preset : kAllPresetEnumerators) {
         const core::HotkeySpec spec = core::get_spec(preset);
@@ -44,7 +40,7 @@ TEST(HotkeysTest, EachPresetMapsToASpec) {
     }
 }
 
-// test_super_v_spec: SUPER_V maps to ((SUPER,), V) with display name "Super+V".
+// SUPER_V maps to ((Super,), V) with display name "Super+V".
 TEST(HotkeysTest, SuperVSpecHasSuperModifierAndVKey) {
     const core::HotkeySpec spec = core::get_spec(core::HotkeyPreset::SuperV);
     const std::vector<core::Modifier> expected_modifiers{core::Modifier::Super};
@@ -53,7 +49,6 @@ TEST(HotkeysTest, SuperVSpecHasSuperModifierAndVKey) {
     EXPECT_EQ(spec.display_name(), "Super+V");
 }
 
-// test_default_preset_is_super_v.
 TEST(HotkeysTest, DefaultPresetIsSuperV) {
     EXPECT_EQ(core::kDefaultPreset, core::HotkeyPreset::SuperV);
 }

@@ -1,11 +1,9 @@
 // Port of the reference oracle tests/core/test_history.py.
 //
-// Exercises HistoryService's rules — blank rejection, dedup/move-to-front,
-// pinned-first ordering, capacity eviction (pinned never evicted), clear, and
-// subscriber notification — against the in-memory fakes. One extra case beyond
-// the Python oracle proves notify() invokes subscribers OUTSIDE the lock: a
-// callback that re-enters entries() must neither deadlock nor miss the new
-// entry (C++ Core Guidelines CP.22).
+// Exercises HistoryService's rules against the in-memory fakes: blank rejection,
+// dedup/move-to-front, pinned-first ordering, capacity eviction (pinned never
+// evicted), clear, and subscriber notification. One case goes beyond the oracle
+// to prove notify() runs outside the lock (see NotifiesSubscribersOutsideTheLock).
 
 #include "core/HistoryService.hpp"
 #include "core/Models.hpp"
@@ -41,10 +39,9 @@ constexpr std::chrono::seconds kStep{60};
     return std::chrono::system_clock::time_point{std::chrono::sys_days{ymd}};
 }
 
-// Owns a repository, a fake clock, and the service under test, wired so the
-// service's reference collaborators outlive it. Mirrors the reference
-// _service(max_items) factory; constructed as a local in each case because the
-// service is intentionally non-copyable/non-movable.
+// Owns the repository, clock, and service under test, wired so the service's
+// reference collaborators outlive it. Mirrors the reference _service(max_items);
+// a local per case because the service is non-copyable/non-movable.
 struct ServiceHarness {
     explicit ServiceHarness(int max_items = kDefaultMaxItems)
         : service{repository, clock, max_items} {}
@@ -75,33 +72,29 @@ contents_in_order(const std::vector<core::ClipboardEntry>& entries) {
     return result;
 }
 
-// test_add_ignores_blank
 TEST(HistoryServiceTest, AddIgnoresBlank) {
     ServiceHarness harness;
     EXPECT_FALSE(harness.service.add("   "));
     EXPECT_TRUE(harness.service.entries().empty());
 }
 
-// Beyond the Python oracle: str.strip() rejects non-ASCII whitespace too, so
-// content written only in Unicode whitespace must be ignored, while content with
-// any non-whitespace code point is stored.
+// Beyond the oracle: like Python's str.strip(), all-Unicode-whitespace content is
+// rejected, while content with any non-whitespace code point is stored.
 TEST(HistoryServiceTest, AddIgnoresUnicodeWhitespaceOnly) {
     ServiceHarness harness;
-    EXPECT_FALSE(harness.service.add(" 　 ")); // NBSP, ideographic, thin space
+    EXPECT_FALSE(harness.service.add("\u00A0\u3000\u2009")); // NBSP, ideographic, thin space
     EXPECT_TRUE(harness.service.entries().empty());
 
-    EXPECT_TRUE(harness.service.add(" x")); // a non-whitespace code point present
-    EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{" x"}));
+    EXPECT_TRUE(harness.service.add("\u00A0x")); // a non-whitespace code point present
+    EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"\u00A0x"}));
 }
 
-// test_add_then_entries_lists_it
 TEST(HistoryServiceTest, AddThenEntriesListsIt) {
     ServiceHarness harness;
     EXPECT_TRUE(harness.service.add("hello"));
     EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"hello"}));
 }
 
-// test_re_add_moves_to_front
 TEST(HistoryServiceTest, ReAddMovesToFront) {
     ServiceHarness harness;
     harness.service.add("first");
@@ -113,7 +106,6 @@ TEST(HistoryServiceTest, ReAddMovesToFront) {
               (std::vector<std::string>{"first", "second"}));
 }
 
-// test_pinned_sort_first
 TEST(HistoryServiceTest, PinnedSortFirst) {
     ServiceHarness harness;
     harness.service.add("a");
@@ -123,7 +115,6 @@ TEST(HistoryServiceTest, PinnedSortFirst) {
     EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"a", "b"}));
 }
 
-// test_cap_evicts_oldest_unpinned
 TEST(HistoryServiceTest, CapEvictsOldestUnpinned) {
     ServiceHarness harness{2};
     for (const auto* text : {"a", "b", "c"}) {
@@ -133,7 +124,6 @@ TEST(HistoryServiceTest, CapEvictsOldestUnpinned) {
     EXPECT_EQ(content_set(harness.service.entries()), (std::set<std::string>{"b", "c"}));
 }
 
-// test_subscribers_notified_on_change
 TEST(HistoryServiceTest, SubscribersNotifiedOnChange) {
     ServiceHarness harness;
     std::vector<int> calls;
@@ -142,7 +132,6 @@ TEST(HistoryServiceTest, SubscribersNotifiedOnChange) {
     EXPECT_EQ(calls, (std::vector<int>{1}));
 }
 
-// test_clear_unpinned_keeps_only_pinned
 TEST(HistoryServiceTest, ClearUnpinnedKeepsOnlyPinned) {
     ServiceHarness harness;
     harness.service.add("keep");
@@ -153,13 +142,11 @@ TEST(HistoryServiceTest, ClearUnpinnedKeepsOnlyPinned) {
     EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"keep"}));
 }
 
-// test_toggle_pin_missing_returns_false
 TEST(HistoryServiceTest, TogglePinMissingReturnsFalse) {
     ServiceHarness harness;
     EXPECT_FALSE(harness.service.toggle_pin("nope"));
 }
 
-// test_pinned_entries_are_never_evicted
 TEST(HistoryServiceTest, PinnedEntriesAreNeverEvicted) {
     ServiceHarness harness{2};
     harness.service.add("p1");
@@ -175,7 +162,6 @@ TEST(HistoryServiceTest, PinnedEntriesAreNeverEvicted) {
     EXPECT_FALSE(contents.contains("new")); // the unpinned newcomer is evicted
 }
 
-// test_eviction_keeps_pinned_and_most_recent_unpinned
 TEST(HistoryServiceTest, EvictionKeepsPinnedAndMostRecentUnpinned) {
     ServiceHarness harness{2};
     harness.service.add("old");
@@ -188,11 +174,10 @@ TEST(HistoryServiceTest, EvictionKeepsPinnedAndMostRecentUnpinned) {
               (std::set<std::string>{"pinned", "recent"})); // oldest unpinned evicted
 }
 
-// Extra (beyond the Python oracle): proves notify() invokes subscribers OUTSIDE
-// the lock. The callback re-enters entries(), which locks the same non-reentrant
-// mutex; holding the lock during notification would deadlock here. It must also
-// observe the freshly added entry, confirming add() completed its mutation
-// before notifying (CP.22).
+// Beyond the oracle: proves notify() runs OUTSIDE the lock. The callback
+// re-enters entries(), which locks the same non-reentrant mutex, so notifying
+// under the lock would deadlock; it must also observe the freshly added entry,
+// confirming add() finished mutating before notifying (CP.22).
 TEST(HistoryServiceTest, NotifiesSubscribersOutsideTheLock) {
     ServiceHarness harness;
     std::vector<std::size_t> observed_sizes;

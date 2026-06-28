@@ -11,11 +11,9 @@ namespace copyclip::config {
 
 namespace {
 
-// Reads an environment variable, returning the fallback when the variable is
-// unset OR set to the empty string. This mirrors the reference's `os.environ
-// .get(name) or fallback`, where an empty value is treated as absent. The name
-// is a null-terminated C string (the kCamelCase env-name constants are views
-// over string literals), so getenv can consume it directly.
+// Returns the fallback when the variable is unset OR empty, mirroring the
+// reference's `os.environ.get(name) or fallback` (empty value treated as
+// absent). `name` is a NUL-terminated literal, so getenv can read it directly.
 [[nodiscard]] std::string env_or(const char* name, std::string_view fallback) {
     if (const char* raw = std::getenv(name); raw != nullptr) {
         if (const std::string_view value{raw}; !value.empty()) {
@@ -25,10 +23,9 @@ namespace {
     return std::string{fallback};
 }
 
-// The user's home directory, mirroring Python's Path.home(): $HOME when set and
-// non-empty, otherwise the passwd database (getpwuid). This keeps data_dir()
-// absolute even when HOME is unset (a relative ".local/share" would otherwise
-// result). Empty only if neither source is available.
+// Mirrors Python's Path.home(): $HOME when set and non-empty, else the passwd
+// database. Keeps data_dir() absolute when HOME is unset (a bare ".local/share"
+// would otherwise leak through). Empty only if neither source is available.
 [[nodiscard]] std::string home_dir() {
     if (const char* home = std::getenv(kHomeEnv.data()); home != nullptr && *home != '\0') {
         return std::string{home};

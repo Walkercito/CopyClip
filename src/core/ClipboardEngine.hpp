@@ -1,14 +1,11 @@
 #pragma once
 
-// The ClipboardEngine facade: the composition seam between the platform sources
-// and the application services.
-//
-// Mirrors the reference module copyclip/core/engine.py. It holds the injected
-// adapters and services, wires their events together on start(), and exposes a
-// show-request observer so a UI can subscribe without the core importing any UI
-// toolkit. Collaborators are injected as non-owning std::reference_wrapper
-// members (I.11/R.3): observed, never owned, outliving the engine. Pure core
-// layer — no Qt, Xlib, or D-Bus.
+// ClipboardEngine facade: the composition seam between platform sources and
+// application services. Mirrors reference core/engine.py — holds the injected
+// collaborators, wires their events on start(), and exposes a show-request
+// observer so a UI can subscribe without the core importing any UI toolkit.
+// Collaborators are non-owning std::reference_wrapper members (I.11/R.3):
+// observed, never owned, outliving the engine. Pure core layer — no Qt/Xlib/D-Bus.
 
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
@@ -25,17 +22,15 @@ public:
     ClipboardEngine(ClipboardSource& clipboard, HotkeyListener& hotkey, HistoryService& history,
                     SettingsService& settings);
 
-    // Wire the clipboard source and hotkey listener to their handlers and begin
-    // listening.
+    // Wire both sources to their handlers and begin listening.
     void start();
 
-    // Stop both sources.
     void stop();
 
     [[nodiscard]] HistoryService& history();
     [[nodiscard]] SettingsService& settings();
 
-    // Register a callback fired whenever the hotkey requests the UI to show.
+    // Register a callback fired when the hotkey requests the UI to show.
     void on_show_requested(std::function<void()> callback);
 
     // Write text to the system clipboard and record it in the history.
