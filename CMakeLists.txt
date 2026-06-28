@@ -72,3 +72,20 @@ add_subdirectory(src)
 # unit under test.
 enable_testing()
 add_subdirectory(tests)
+
+# --- Memory-check convenience target ------------------------------------------
+# `cmake --build <dir> --target memcheck` builds the tests, then runs Valgrind
+# over the Qt/X11-free test binaries (the adapters/app tests are Qt-noisy under
+# Valgrind and are covered by the asan preset instead). Defined only when
+# Valgrind is installed, and meaningful only on a non-sanitized build (the debug
+# preset) since Valgrind and ASan conflict.
+find_program(VALGRIND_COMMAND valgrind)
+if(VALGRIND_COMMAND)
+  add_custom_target(
+    memcheck
+    COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}"
+    COMMAND "${CMAKE_SOURCE_DIR}/scripts/memcheck.sh" "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    USES_TERMINAL
+    COMMENT "Valgrind memcheck over the Qt/X11-free test binaries")
+endif()

@@ -1,97 +1,96 @@
 name: CI
 
+# Runs on every push to ANY branch (so feature branches are always green) and on
+# pull requests into main — no surprises when a branch is finally merged.
 on:
   push:
-    branches: [main]
   pull_request:
     branches: [main]
 
+# Cancel superseded runs for the same ref (e.g. rapid pushes to a feature branch).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-check:
-    name: Build, lint, and test (ASan)
+    name: Build, lint, test (ASan)
     runs-on: ubuntu-24.04
-
     env:
-      # Full (non-shallow) vcpkg clone lives here. A shallow clone cannot resolve the pinned
-      # builtin-baseline in vcpkg.json, so configure would fail with "cloned as a shallow
-      # repository". See the checkout step below.
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      # clang-format / clang-tidy version pinned for parity with local (18.1.8).
+      # Pin clang-format/clang-tidy for parity with local (18.1.8).
       CLANG_TOOLS_VERSION: 18.1.8
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        # Qt6 + X11 + Ninja. ASan/UBSan/LSan runtimes ship with the system gcc/clang.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            qt6-base-dev qt6-tools-dev libgl-dev libx11-dev ninja-build
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
       - name: Install pinned clang-format and clang-tidy
-        # Pip wheels give the exact 18.1.8 build the project formats/lints against locally,
-        # rather than whatever apt happens to ship. setup-python guarantees pip is present.
         run: |
           python3 -m pip install --user \
             "clang-format==${CLANG_TOOLS_VERSION}" \
             "clang-tidy==${CLANG_TOOLS_VERSION}"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Verify clang tool versions
+      - name: Configure and build (asan preset)
         run: |
-          clang-format --version
-          clang-tidy --version
-
-      - name: Bootstrap vcpkg (full clone)
-        # IMPORTANT: a full clone is required — a shallow clone cannot resolve the pinned
-        # builtin-baseline (5d35de2e...) and configure fails to unpack the tree object.
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
-
-      - name: Cache vcpkg downloads and binary artifacts
-        # Optional speed-up; safe to miss. Keyed on vcpkg.json so a dependency bump
-        # invalidates the cache.
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/vcpkg/archives
-            ${{ env.VCPKG_ROOT }}/downloads
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            vcpkg-${{ runner.os }}-
-
-      - name: Configure (asan preset)
-        run: cmake --preset asan
-
-      - name: Build (asan preset)
-        run: cmake --build --preset asan
+          cmake --preset asan
+          cmake --build --preset asan
 
       - name: clang-format check
-        # Fail the job if any tracked C/C++ source under src/ or tests/ is unformatted.
         run: |
-          mapfile -t files < <(git ls-files \
-            'src/**/*.cpp' 'src/**/*.hpp' 'src/**/*.cc' 'src/**/*.h' \
-            'tests/**/*.cpp' 'tests/**/*.hpp' 'tests/**/*.cc' 'tests/**/*.h')
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No C/C++ files to format-check."
-            exit 0
+          mapfile -t files < <(git ls-files 'src/**/*.cpp' 'src/**/*.hpp' \
+            'tests/**/*.cpp' 'tests/**/*.hpp')
+          if [ ${#files[@]} -gt 0 ]; then
+            clang-format --dry-run -Werror "${files[@]}"
           fi
-          clang-format --dry-run -Werror "${files[@]}"
 
       - name: clang-tidy check
-        # Lint every .cpp translation unit under src/ against the asan compile database.
         run: |
           mapfile -t files < <(git ls-files 'src/**/*.cpp')
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No C++ translation units to lint."
-            exit 0
+          if [ ${#files[@]} -gt 0 ]; then
+            clang-tidy -p build/asan "${files[@]}"
           fi
-          clang-tidy -p build/asan "${files[@]}"
 
       - name: Test (ctest, asan preset)
-        # --no-tests=ignore (CMake >= 3.28) keeps the step green before any tests exist,
-        # without masking real failures once tests are added.
         run: ctest --preset asan --output-on-failure --no-tests=ignore
+
+  memcheck:
+    name: Valgrind memcheck (Qt/X11-free tests)
+    runs-on: ubuntu-24.04
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          valgrind: "true"
+
+      # Valgrind needs a non-sanitized build (it conflicts with ASan), so use the
+      # debug preset here.
+      - name: Configure and build (debug preset)
+        run: |
+          cmake --preset debug
+          cmake --build --preset debug
+
+      - name: Valgrind memcheck
+        run: ./scripts/memcheck.sh build/debug
+
+  integration:
+    name: Integration (release build + headless smoke)
+    runs-on: ubuntu-24.04
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Configure and build (release preset)
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+
+      - name: Test (ctest, release preset)
+        run: ctest --preset release --output-on-failure --no-tests=ignore
+
+      - name: Headless smoke (single-instance + show IPC)
+        run: ./scripts/smoke.sh build/release/src/app/copyclip

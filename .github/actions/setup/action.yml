@@ -1,0 +1,42 @@
+name: Set up build environment
+description: >
+  Install system dependencies (Qt6, X11, Ninja, optionally Valgrind), bootstrap
+  vcpkg with a FULL clone (a shallow clone cannot resolve the pinned
+  builtin-baseline in vcpkg.json), and cache vcpkg artifacts. Expects the calling
+  job to set the VCPKG_ROOT environment variable.
+
+inputs:
+  valgrind:
+    description: Also install Valgrind (for the memcheck job).
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qt6-base-dev qt6-tools-dev libgl-dev libx11-dev ninja-build
+        if [ "${{ inputs.valgrind }}" = "true" ]; then
+          sudo apt-get install -y valgrind
+        fi
+
+    - name: Bootstrap vcpkg (full clone)
+      shell: bash
+      run: |
+        if [ ! -x "$VCPKG_ROOT/vcpkg" ]; then
+          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+        fi
+
+    - name: Cache vcpkg downloads and binary artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/vcpkg/archives
+          ${{ env.VCPKG_ROOT }}/downloads
+        key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          vcpkg-${{ runner.os }}-
