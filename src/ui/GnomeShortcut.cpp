@@ -6,6 +6,7 @@
 #include <glibmm/miscutils.h>
 #include <glibmm/spawn.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -22,8 +23,12 @@ constexpr const char* kKeybindingPath =
     "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/copyclip/";
 constexpr const char* kShortcutName = "CopyClip";
 
-// Wrap a value as a GVariant string literal for gsettings (e.g. CopyClip ->
-// 'CopyClip'). Commands and accelerators never contain a single quote.
+[[nodiscard]] bool gsettings_available() {
+    return !Glib::find_program_in_path("gsettings").empty();
+}
+
+// Wrap a value as a GVariant string literal (CopyClip -> 'CopyClip'). Commands
+// and accelerators never contain a single quote.
 [[nodiscard]] std::string as_gvariant_string(const std::string& value) {
     return "'" + value + "'";
 }
@@ -54,6 +59,19 @@ bool run_gsettings(const std::vector<std::string>& args, std::string* output) {
     return value;
 }
 
+[[nodiscard]] std::vector<std::string> custom_keybinding_paths() {
+    std::string current;
+    if (!run_gsettings({"get", kMediaKeysSchema, "custom-keybindings"}, &current)) {
+        return {};
+    }
+    return parse_keybinding_paths(trim_trailing_whitespace(current));
+}
+
+bool set_custom_keybinding_paths(const std::vector<std::string>& paths) {
+    return run_gsettings(
+        {"set", kMediaKeysSchema, "custom-keybindings", build_keybinding_array(paths)}, nullptr);
+}
+
 } // namespace
 
 std::string executable_path() {
@@ -63,19 +81,16 @@ std::string executable_path() {
 }
 
 bool register_gnome_shortcut(const std::string& command, core::HotkeyPreset preset) {
-    if (command.empty() || Glib::find_program_in_path("gsettings").empty()) {
+    if (command.empty() || !gsettings_available()) {
         return false;
+    }
+    std::vector<std::string> paths = custom_keybinding_paths();
+    if (std::find(paths.begin(), paths.end(), kKeybindingPath) == paths.end()) {
+        paths.emplace_back(kKeybindingPath);
     }
     const std::string binding_schema = std::string{kCustomKeybindingSchema} + ":" + kKeybindingPath;
 
-    std::string current_list;
-    if (!run_gsettings({"get", kMediaKeysSchema, "custom-keybindings"}, &current_list)) {
-        return false;
-    }
-    const std::string merged =
-        with_keybinding_path(trim_trailing_whitespace(current_list), kKeybindingPath);
-
-    return run_gsettings({"set", kMediaKeysSchema, "custom-keybindings", merged}, nullptr) &&
+    return set_custom_keybinding_paths(paths) &&
            run_gsettings({"set", binding_schema, "name", as_gvariant_string(kShortcutName)},
                          nullptr) &&
            run_gsettings({"set", binding_schema, "command", as_gvariant_string(command)},
@@ -83,6 +98,27 @@ bool register_gnome_shortcut(const std::string& command, core::HotkeyPreset pres
            run_gsettings(
                {"set", binding_schema, "binding", as_gvariant_string(accelerator_for(preset))},
                nullptr);
+}
+
+bool unregister_gnome_shortcut() {
+    if (!gsettings_available()) {
+        return false;
+    }
+    std::vector<std::string> paths = custom_keybinding_paths();
+    const auto removed = std::remove(paths.begin(), paths.end(), kKeybindingPath);
+    if (removed == paths.end()) {
+        return true; // already absent
+    }
+    paths.erase(removed, paths.end());
+    return set_custom_keybinding_paths(paths);
+}
+
+bool is_gnome_shortcut_registered() {
+    if (!gsettings_available()) {
+        return false;
+    }
+    const std::vector<std::string> paths = custom_keybinding_paths();
+    return std::find(paths.begin(), paths.end(), kKeybindingPath) != paths.end();
 }
 
 } // namespace copyclip::ui

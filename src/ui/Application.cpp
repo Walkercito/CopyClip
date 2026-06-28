@@ -1,5 +1,6 @@
 #include "ui/Application.hpp"
 
+#include "core/Enums.hpp"
 #include "ui/Constants.hpp"
 #include "ui/GnomeShortcut.hpp"
 
@@ -42,10 +43,19 @@ void Application::on_activate() {
                                                settings_.get(), *clipboard_);
         clipboard_->start([this](const std::string& text) { history_.get().add(text); });
         application_->hold(); // keep capturing in the background after the window hides
-        // Register on idle so the synchronous gsettings calls don't delay the
-        // window appearing.
+        // On idle (so gsettings calls don't delay the window): onboard a new user,
+        // otherwise refresh the binding only if the shortcut is still enabled.
         Glib::signal_idle().connect_once([this] {
-            register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
+            if (settings_.get().is_first_run()) {
+                first_run_dialog_ = std::make_unique<FirstRunDialog>(
+                    window_->native(), settings_.get().settings().hotkey,
+                    [this](core::HotkeyPreset hotkey) {
+                        settings_.get().complete_first_run(hotkey);
+                        register_gnome_shortcut(executable_path(), hotkey);
+                    });
+            } else if (is_gnome_shortcut_registered()) {
+                register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
+            }
         });
     }
     window_->toggle();

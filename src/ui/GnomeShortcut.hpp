@@ -18,4 +18,10 @@ namespace copyclip::ui {
 // unavailable, e.g. on non-GNOME desktops.
 bool register_gnome_shortcut(const std::string& command, core::HotkeyPreset preset);
 
+// Remove CopyClip's keybinding, leaving the user's other shortcuts intact.
+bool unregister_gnome_shortcut();
+
+// Whether CopyClip's keybinding is currently present in gsettings.
+[[nodiscard]] bool is_gnome_shortcut_registered();
+
 } // namespace copyclip::ui

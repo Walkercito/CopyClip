@@ -29,10 +29,12 @@ public:
 private:
     static void on_theme_selected(GObject* row, GParamSpec* spec, gpointer self);
     static void on_hotkey_selected(GObject* row, GParamSpec* spec, gpointer self);
+    static void on_shortcut_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_hide_toggled(GObject* row, GParamSpec* spec, gpointer self);
 
     void apply_theme(unsigned int index);
     void apply_hotkey(unsigned int index);
+    void apply_shortcut_enabled(bool active);
     void apply_auto_hide(bool active);
 
     std::reference_wrapper<core::SettingsService> settings_;

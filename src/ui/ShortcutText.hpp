@@ -7,17 +7,18 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace copyclip::ui {
 
 // The GNOME accelerator string for a preset, e.g. SuperV -> "<Super>v".
 [[nodiscard]] std::string accelerator_for(core::HotkeyPreset preset);
 
-// Return the gsettings custom-keybindings array `existing_list` with `path`
-// appended if it isn't already present, preserving any other entries so a user's
-// own shortcuts are never clobbered. Accepts "[]", "@as []", or "['/a/', '/b/']".
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): names disambiguate the order
-[[nodiscard]] std::string with_keybinding_path(std::string_view existing_list,
-                                               std::string_view path);
+// Parse a gsettings string-array value ("[]", "@as []", or "['/a/', '/b/']")
+// into its entries.
+[[nodiscard]] std::vector<std::string> parse_keybinding_paths(std::string_view list);
+
+// Render entries back into a gsettings string-array value ("@as []" when empty).
+[[nodiscard]] std::string build_keybinding_array(const std::vector<std::string>& paths);
 
 } // namespace copyclip::ui

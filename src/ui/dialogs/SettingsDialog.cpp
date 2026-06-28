@@ -3,6 +3,7 @@
 #include "core/Enums.hpp"
 #include "core/Hotkeys.hpp"
 #include "core/Models.hpp"
+#include "ui/Constants.hpp"
 #include "ui/GnomeShortcut.hpp"
 
 #include <adwaita.h>
@@ -63,6 +64,7 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     const core::Settings& current = settings.settings();
 
     auto* dialog = ADW_PREFERENCES_DIALOG(adw_preferences_dialog_new());
+    adw_dialog_set_content_width(ADW_DIALOG(dialog), kDialogContentWidth);
     auto* page = ADW_PREFERENCES_PAGE(adw_preferences_page_new());
     adw_preferences_dialog_add(dialog, page);
 
@@ -71,7 +73,17 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     g_signal_connect(theme_row, "notify::selected", G_CALLBACK(&SettingsDialog::on_theme_selected),
                      this);
 
-    AdwComboRow* hotkey_row = add_combo_row(add_group(page, "Shortcut"), "Open CopyClip");
+    AdwPreferencesGroup* shortcut_group = add_group(page, "Shortcut");
+
+    auto* shortcut_enabled_row = ADW_SWITCH_ROW(adw_switch_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(shortcut_enabled_row), "Global shortcut");
+    adw_switch_row_set_active(shortcut_enabled_row,
+                              static_cast<gboolean>(is_gnome_shortcut_registered()));
+    adw_preferences_group_add(shortcut_group, GTK_WIDGET(shortcut_enabled_row));
+    g_signal_connect(shortcut_enabled_row, "notify::active",
+                     G_CALLBACK(&SettingsDialog::on_shortcut_toggled), this);
+
+    AdwComboRow* hotkey_row = add_combo_row(shortcut_group, "Open CopyClip");
     std::vector<std::string> hotkey_names;
     unsigned int hotkey_selected = 0;
     const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
@@ -105,6 +117,11 @@ void SettingsDialog::on_hotkey_selected(GObject* row, GParamSpec* /*spec*/, gpoi
         adw_combo_row_get_selected(ADW_COMBO_ROW(row)));
 }
 
+void SettingsDialog::on_shortcut_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
+    static_cast<SettingsDialog*>(self)->apply_shortcut_enabled(
+        adw_switch_row_get_active(ADW_SWITCH_ROW(row)) != FALSE);
+}
+
 void SettingsDialog::on_auto_hide_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
     static_cast<SettingsDialog*>(self)->apply_auto_hide(
         adw_switch_row_get_active(ADW_SWITCH_ROW(row)) != FALSE);
@@ -126,7 +143,18 @@ void SettingsDialog::apply_hotkey(unsigned int index) {
     core::Settings updated = settings_.get().settings();
     updated.hotkey = presets.at(index).first;
     settings_.get().update(updated);
-    register_gnome_shortcut(executable_path(), updated.hotkey);
+    // Only refresh the binding if the shortcut is currently enabled.
+    if (is_gnome_shortcut_registered()) {
+        register_gnome_shortcut(executable_path(), updated.hotkey);
+    }
+}
+
+void SettingsDialog::apply_shortcut_enabled(bool active) {
+    if (active) {
+        register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
+    } else {
+        unregister_gnome_shortcut();
+    }
 }
 
 void SettingsDialog::apply_auto_hide(bool active) {

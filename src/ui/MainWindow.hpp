@@ -41,6 +41,8 @@ public:
     // Show and focus the window if hidden, otherwise hide it (global-shortcut
     // relaunch toggles visibility).
     void toggle();
+    // The underlying window widget, for parenting dialogs.
+    [[nodiscard]] GtkWidget* native() const;
 
 private:
     void build_ui(GtkApplication* application);

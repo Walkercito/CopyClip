@@ -9,6 +9,7 @@
 #include "core/SettingsService.hpp"
 #include "ui/GdkClipboardSource.hpp"
 #include "ui/MainWindow.hpp"
+#include "ui/dialogs/FirstRunDialog.hpp"
 
 #include <gtkmm/application.h>
 
@@ -42,6 +43,7 @@ private:
     Glib::RefPtr<Gtk::Application> application_;
     std::unique_ptr<GdkClipboardSource> clipboard_;
     std::unique_ptr<MainWindow> window_;
+    std::unique_ptr<FirstRunDialog> first_run_dialog_;
 };
 
 } // namespace copyclip::ui

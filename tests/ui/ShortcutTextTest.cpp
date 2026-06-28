@@ -2,11 +2,14 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 namespace {
 
 using copyclip::core::HotkeyPreset;
 using copyclip::ui::accelerator_for;
-using copyclip::ui::with_keybinding_path;
+using copyclip::ui::build_keybinding_array;
+using copyclip::ui::parse_keybinding_paths;
 
 TEST(ShortcutTextTest, MapsPresetsToGnomeAccelerators) {
     EXPECT_EQ(accelerator_for(HotkeyPreset::SuperV), "<Super>v");
@@ -15,17 +18,27 @@ TEST(ShortcutTextTest, MapsPresetsToGnomeAccelerators) {
     EXPECT_EQ(accelerator_for(HotkeyPreset::CtrlShiftV), "<Control><Shift>v");
 }
 
-TEST(ShortcutTextTest, AppendsToAnEmptyList) {
-    EXPECT_EQ(with_keybinding_path("[]", "/a/"), "['/a/']");
-    EXPECT_EQ(with_keybinding_path("@as []", "/a/"), "['/a/']");
+TEST(ShortcutTextTest, ParsesEntries) {
+    EXPECT_EQ(parse_keybinding_paths("['/x/', '/y/']"), (std::vector<std::string>{"/x/", "/y/"}));
 }
 
-TEST(ShortcutTextTest, PreservesExistingEntries) {
-    EXPECT_EQ(with_keybinding_path("['/x/', '/y/']", "/a/"), "['/x/', '/y/', '/a/']");
+TEST(ShortcutTextTest, ParsesEmptyForms) {
+    EXPECT_TRUE(parse_keybinding_paths("[]").empty());
+    EXPECT_TRUE(parse_keybinding_paths("@as []").empty());
 }
 
-TEST(ShortcutTextTest, IsIdempotentWhenAlreadyPresent) {
-    EXPECT_EQ(with_keybinding_path("['/x/', '/a/']", "/a/"), "['/x/', '/a/']");
+TEST(ShortcutTextTest, BuildsArray) {
+    EXPECT_EQ(build_keybinding_array({"/x/", "/y/"}), "['/x/', '/y/']");
+}
+
+TEST(ShortcutTextTest, BuildsTypedEmptyArray) {
+    EXPECT_EQ(build_keybinding_array({}), "@as []");
+}
+
+TEST(ShortcutTextTest, RoundTripsAppendedPath) {
+    std::vector<std::string> paths = parse_keybinding_paths("['/x/']");
+    paths.emplace_back("/a/");
+    EXPECT_EQ(build_keybinding_array(paths), "['/x/', '/a/']");
 }
 
 } // namespace

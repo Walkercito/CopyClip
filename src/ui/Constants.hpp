@@ -19,6 +19,10 @@ inline constexpr int kWindowMinHeight = 420;
 // Margin around the content area and the list, in pixels.
 inline constexpr int kContentMargin = 12;
 
+// Width of presented dialogs, so they sit as inset cards rather than full-width
+// sheets.
+inline constexpr int kDialogContentWidth = 400;
+
 // Code points shown on a collapsed card before truncation.
 inline constexpr std::size_t kMaxPreviewChars = 120;
 

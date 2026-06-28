@@ -1,8 +1,5 @@
 #include "ui/ShortcutText.hpp"
 
-#include <algorithm>
-#include <vector>
-
 namespace copyclip::ui {
 
 std::string accelerator_for(core::HotkeyPreset preset) {
@@ -19,23 +16,23 @@ std::string accelerator_for(core::HotkeyPreset preset) {
     return "<Super>v";
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): names disambiguate the order
-std::string with_keybinding_path(std::string_view existing_list, std::string_view path) {
-    // Pull out every single-quoted entry already in the array.
+std::vector<std::string> parse_keybinding_paths(std::string_view list) {
     std::vector<std::string> paths;
-    for (std::size_t open = existing_list.find('\''); open != std::string_view::npos;) {
-        const std::size_t close = existing_list.find('\'', open + 1);
+    for (std::size_t open = list.find('\''); open != std::string_view::npos;) {
+        const std::size_t close = list.find('\'', open + 1);
         if (close == std::string_view::npos) {
             break;
         }
-        paths.emplace_back(existing_list.substr(open + 1, close - open - 1));
-        open = existing_list.find('\'', close + 1);
+        paths.emplace_back(list.substr(open + 1, close - open - 1));
+        open = list.find('\'', close + 1);
     }
+    return paths;
+}
 
-    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
-        paths.emplace_back(path);
+std::string build_keybinding_array(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return "@as []";
     }
-
     std::string result{"["};
     for (std::size_t i = 0; i < paths.size(); ++i) {
         if (i != 0) {

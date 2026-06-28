@@ -205,6 +205,10 @@ void MainWindow::present() {
     gtk_window_present(GTK_WINDOW(window_));
 }
 
+GtkWidget* MainWindow::native() const {
+    return GTK_WIDGET(window_);
+}
+
 void MainWindow::toggle() {
     if (gtk_widget_get_visible(GTK_WIDGET(window_)) != FALSE) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);

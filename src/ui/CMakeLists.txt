@@ -27,7 +27,8 @@ add_library(
   GdkClipboardSource.cpp
   GnomeShortcut.cpp
   widgets/ClipCard.cpp
-  dialogs/SettingsDialog.cpp)
+  dialogs/SettingsDialog.cpp
+  dialogs/FirstRunDialog.cpp)
 add_library(copyclip::ui ALIAS copyclip_ui)
 
 target_include_directories(copyclip_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
