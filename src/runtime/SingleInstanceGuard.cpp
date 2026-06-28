@@ -87,6 +87,7 @@ bool SingleInstanceGuard::acquire(std::function<void()> on_show) {
     server_ = std::move(server);
     on_show_ = std::move(on_show);
     thread_ = std::jthread{[this](const std::stop_token& stop_token) { serve(stop_token); }};
+    acquired_ = true;
     return true;
 }
 
@@ -111,6 +112,11 @@ bool SingleInstanceGuard::signal_show() const {
 }
 
 void SingleInstanceGuard::release() {
+    // A guard that never acquired does not own the socket file (it belongs to the
+    // running instance); tearing down here would delete a live instance's socket.
+    if (!acquired_) {
+        return;
+    }
     if (thread_.joinable()) {
         thread_.request_stop();
         thread_.join();
@@ -120,6 +126,7 @@ void SingleInstanceGuard::release() {
         std::error_code remove_error;
         std::filesystem::remove(socket_path_, remove_error);
     }
+    acquired_ = false;
 }
 
 void SingleInstanceGuard::serve(const std::stop_token& stop_token) {

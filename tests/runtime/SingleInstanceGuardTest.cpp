@@ -87,4 +87,28 @@ TEST(SingleInstanceGuardTest, StaleSocketIsReclaimed) {
     guard.release();
 }
 
+TEST(SingleInstanceGuardTest, NonOwningGuardDestructionLeavesOwnerSocketIntact) {
+    const TempDir dir;
+    const std::filesystem::path socket_path = dir.path() / "copyclip.sock";
+
+    SingleInstanceGuard first{socket_path};
+    ASSERT_TRUE(first.acquire([] {}));
+
+    {
+        // A second guard fails to acquire and is destroyed while `first` is still
+        // alive. Its destructor must NOT remove the socket it never owned.
+        SingleInstanceGuard second{socket_path};
+        EXPECT_FALSE(second.acquire([] {}));
+    }
+
+    // The owner's socket survives: it is still on disk, a fresh guard still fails
+    // to acquire, and the live first instance is still reachable over IPC.
+    EXPECT_TRUE(std::filesystem::exists(socket_path));
+    SingleInstanceGuard third{socket_path};
+    EXPECT_FALSE(third.acquire([] {}));
+    EXPECT_TRUE(third.signal_show());
+
+    first.release();
+}
+
 } // namespace

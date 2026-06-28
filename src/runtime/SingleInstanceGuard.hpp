@@ -74,8 +74,10 @@ public:
     // Returns false if no instance is reachable.
     [[nodiscard]] bool signal_show() const;
 
-    // Stop serving, close the socket, and remove the socket file. Idempotent;
-    // also invoked by the destructor.
+    // Stop serving, close the socket, and remove the socket file. Idempotent and
+    // also invoked by the destructor. A no-op on a guard that never successfully
+    // acquired: such a guard does not own the socket file (it belongs to the
+    // running instance) and must never delete it.
     void release();
 
 private:
@@ -92,6 +94,9 @@ private:
     std::function<void()> on_show_;
     UniqueFd server_;
     std::jthread thread_;
+    // True only between a successful acquire() and release(): gates socket
+    // teardown so a non-owning guard never removes the running instance's socket.
+    bool acquired_ = false;
 };
 
 } // namespace copyclip::runtime
