@@ -3,7 +3,6 @@
 #include "core/Models.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <mutex>
 #include <optional>
@@ -16,12 +15,74 @@ namespace copyclip::core {
 
 namespace {
 
+// The Unicode code points Python's str.isspace() treats as whitespace, so that
+// str.strip() removes them: the ASCII controls and space, the bidirectional
+// separators 0x1C-0x1F, NEL (0x85), and the Unicode space separators. Keeping
+// the full set (not just ASCII) means content that is "blank" by the reference's
+// rule but written in non-ASCII whitespace — e.g. a non-breaking space (U+00A0)
+// or an ideographic space (U+3000) — is rejected too.
+[[nodiscard]] constexpr bool is_whitespace_code_point(char32_t code_point) {
+    return (code_point >= 0x09 && code_point <= 0x0D) ||
+           (code_point >= 0x1C && code_point <= 0x1F) || code_point == 0x20 || code_point == 0x85 ||
+           code_point == 0xA0 || code_point == 0x1680 ||
+           (code_point >= 0x2000 && code_point <= 0x200A) || code_point == 0x2028 ||
+           code_point == 0x2029 || code_point == 0x202F || code_point == 0x205F ||
+           code_point == 0x3000;
+}
+
+// Decode the UTF-8 code point beginning at text[pos], advancing pos past it.
+// Returns std::nullopt on malformed UTF-8 (an invalid lead/continuation byte or a
+// truncated sequence), which the caller treats as real content rather than blank.
+[[nodiscard]] std::optional<char32_t> next_code_point(std::string_view text, std::size_t& pos) {
+    const auto byte_at = [&text](std::size_t index) {
+        return static_cast<unsigned char>(text[index]);
+    };
+    const unsigned char lead = byte_at(pos);
+    std::size_t length = 0;
+    char32_t code_point = 0;
+    if (lead < 0x80) {
+        length = 1;
+        code_point = lead;
+    } else if ((lead & 0xE0) == 0xC0) {
+        length = 2;
+        code_point = static_cast<char32_t>(lead & 0x1F);
+    } else if ((lead & 0xF0) == 0xE0) {
+        length = 3;
+        code_point = static_cast<char32_t>(lead & 0x0F);
+    } else if ((lead & 0xF8) == 0xF0) {
+        length = 4;
+        code_point = static_cast<char32_t>(lead & 0x07);
+    } else {
+        return std::nullopt;
+    }
+    if (pos + length > text.size()) {
+        return std::nullopt;
+    }
+    for (std::size_t offset = 1; offset < length; ++offset) {
+        const unsigned char continuation = byte_at(pos + offset);
+        if ((continuation & 0xC0) != 0x80) {
+            return std::nullopt;
+        }
+        code_point = static_cast<char32_t>((code_point << 6U) | (continuation & 0x3FU));
+    }
+    pos += length;
+    return code_point;
+}
+
 // True when `text` is empty or contains only whitespace — the reject condition
-// for add(), mirroring the reference's `not content or not content.strip()`. The
-// default "C" locale set matches Python's ASCII str.strip() whitespace exactly.
+// for add(), mirroring the reference's `not content or not content.strip()`.
+// Decodes UTF-8 and applies Python's full whitespace set, so non-ASCII
+// whitespace-only content is rejected too. Malformed UTF-8 is treated as real
+// content (not blank), erring toward keeping data.
 [[nodiscard]] bool is_blank(std::string_view text) {
-    return std::ranges::all_of(
-        text, [](char ch) { return std::isspace(static_cast<unsigned char>(ch)) != 0; });
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const std::optional<char32_t> code_point = next_code_point(text, pos);
+        if (!code_point.has_value() || !is_whitespace_code_point(*code_point)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace

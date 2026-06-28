@@ -82,6 +82,18 @@ TEST(HistoryServiceTest, AddIgnoresBlank) {
     EXPECT_TRUE(harness.service.entries().empty());
 }
 
+// Beyond the Python oracle: str.strip() rejects non-ASCII whitespace too, so
+// content written only in Unicode whitespace must be ignored, while content with
+// any non-whitespace code point is stored.
+TEST(HistoryServiceTest, AddIgnoresUnicodeWhitespaceOnly) {
+    ServiceHarness harness;
+    EXPECT_FALSE(harness.service.add(" 　 ")); // NBSP, ideographic, thin space
+    EXPECT_TRUE(harness.service.entries().empty());
+
+    EXPECT_TRUE(harness.service.add(" x")); // a non-whitespace code point present
+    EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{" x"}));
+}
+
 // test_add_then_entries_lists_it
 TEST(HistoryServiceTest, AddThenEntriesListsIt) {
     ServiceHarness harness;
