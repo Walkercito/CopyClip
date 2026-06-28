@@ -1,7 +1,8 @@
 # CopyClip — Engineering Standards
 
-A clipboard manager for Linux (X11 + Wayland). The shipping app is **C++/Qt6**. This file
-defines its non-negotiable principles, toolchain, and conventions. They are not suggestions.
+A clipboard manager for Linux (X11 + Wayland). The shipping app is **C++**: a pure engine
+with Qt/X11 adapters and a **GTK4 + libadwaita** UI. This file defines its non-negotiable
+principles, toolchain, and conventions. They are not suggestions.
 
 The Python code in this repository — the engine, plus the archived UI under
 `reference/pyqt6-ui/` — is the **validated reference**: a working, fully-tested design that the
@@ -23,14 +24,16 @@ migration plan.
 
 The app is layered, and dependencies point inward:
 
-> `core/` includes **nothing** from `adapters/`, `runtime/`, or `ui/`. Qt, Xlib, and D-Bus
-> appear **only** under `adapters/`.
+> `core/` includes **nothing** from `adapters/`, `runtime/`, or `ui/`. Qt, Xlib, D-Bus, and
+> GTK appear **only** under `adapters/` (toolkit adapters) and `ui/` (the GTK4 UI).
 
-This keeps `core/` pure and unit-testable with no display server.
+This keeps `core/` pure and unit-testable with no display server. A frontend links only the
+pure engine (`core/` · `storage/` · `runtime/`) plus the adapters it needs — so the GTK UI
+never pulls in Qt.
 
 Layout: `core/` (pure domain + application logic) · `storage/` (concrete repositories) ·
-`adapters/` (Qt, Xlib, portal — the only impure layer) · `runtime/` (process glue) ·
-`config/` (constants) · `ui/` (Qt6 UI).
+`adapters/` (Qt, Xlib, portal, GTK clipboard — the only impure layer) · `runtime/` (process
+glue) · `config/` (constants) · `ui/` (GTK4 + libadwaita UI).
 
 ## Toolchain
 
@@ -44,9 +47,34 @@ Two installed skills carry the detailed how-to; the house rules below govern the
 ### Standard & build
 - **C++23**: `CMAKE_CXX_STANDARD 23`, `CXX_STANDARD_REQUIRED ON`, `CXX_EXTENSIONS OFF`.
 - **CMake** (≥ 3.28); out-of-source builds; target-based, no global flags.
-- **vcpkg** in manifest mode (`vcpkg.json`, pinned versions). Qt6 comes from the system or the
-  official Qt SDK via `find_package`, not vcpkg. (Conan is an acceptable alternative — pick
-  one and commit to it; do not mix.)
+- **vcpkg** in manifest mode (`vcpkg.json`, pinned versions). Qt6, GTK4/gtkmm, and libadwaita
+  come from the system (`find_package` / `pkg-config`), not vcpkg. (Conan is an acceptable
+  alternative — pick one and commit to it; do not mix.)
+
+### System dependencies (apt, Ubuntu 24.04)
+
+The C++ library deps (gtest, spdlog, nlohmann-json, sqlitecpp) come from vcpkg; clang-format,
+clang-tidy, and pre-commit are isolated `uv tool` installs; vcpkg is bootstrapped under
+`$VCPKG_ROOT`. The remaining build/link prerequisites are apt **dev** packages — listed here so
+they can be removed once no longer needed:
+
+- **Engine — Qt headless adapter + X11 hotkey:** `qt6-base-dev` `qt6-tools-dev` `libgl-dev`
+  `libx11-dev`
+- **GTK4 UI — gtkmm + libadwaita:** `libgtkmm-4.0-dev` `libadwaita-1-dev` (these pull
+  `libgtk-4-dev`, `libglibmm-2.68-dev`, `libsigc++-3.0-dev`)
+- **Build / analysis:** `ninja-build` `valgrind`
+
+```sh
+# install
+sudo apt install -y qt6-base-dev qt6-tools-dev libgl-dev libx11-dev \
+                    libgtkmm-4.0-dev libadwaita-1-dev ninja-build valgrind
+# remove when done
+sudo apt remove --autoremove qt6-base-dev qt6-tools-dev libgl-dev libx11-dev \
+                             libgtkmm-4.0-dev libadwaita-1-dev valgrind
+```
+
+Versions in use: Qt6 6.4.2 · GTK4 4.14.5 · gtkmm-4.0 4.10.0 · libadwaita-1 1.5.0 ·
+glibmm-2.68 2.78.1 · libX11 1.8.7 · Valgrind 3.22.0.
 
 ### Formatting & linting
 - **clang-format** with a committed `.clang-format`. Every file is formatted; no exceptions.
