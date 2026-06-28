@@ -7,7 +7,11 @@
 #include "config/Constants.hpp"
 #include "support/ScopedEnv.hpp"
 
+#include <pwd.h>
+#include <unistd.h>
+
 #include <filesystem>
+#include <optional>
 
 #include <gtest/gtest.h>
 
@@ -34,6 +38,20 @@ TEST(ConstantsTest, NamedDefaultsExist) {
     EXPECT_EQ(config::kAppName, "CopyClip");
     EXPECT_EQ(config::kAppId, "copyclip");
     EXPECT_GT(config::kDefaultMaxHistoryItems, 0);
+}
+
+// With both XDG_DATA_HOME and HOME unset, data_dir() falls back to the passwd
+// home (mirroring Python's Path.home()) -> an absolute path, never a relative
+// ".local/share".
+TEST(ConstantsTest, DataDirFallsBackToPasswdHomeWhenHomeUnset) {
+    const ScopedEnv xdg{"XDG_DATA_HOME", std::nullopt};
+    const ScopedEnv home{"HOME", std::nullopt};
+
+    const passwd* entry = ::getpwuid(::getuid());
+    ASSERT_NE(entry, nullptr);
+    const std::filesystem::path expected =
+        std::filesystem::path{entry->pw_dir} / ".local/share" / "copyclip";
+    EXPECT_EQ(config::data_dir(), expected);
 }
 
 } // namespace

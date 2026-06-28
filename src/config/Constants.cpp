@@ -1,5 +1,8 @@
 #include "config/Constants.hpp"
 
+#include <pwd.h>
+#include <unistd.h>
+
 #include <cstdlib>
 #include <string>
 #include <string_view>
@@ -22,12 +25,28 @@ namespace {
     return std::string{fallback};
 }
 
+// The user's home directory, mirroring Python's Path.home(): $HOME when set and
+// non-empty, otherwise the passwd database (getpwuid). This keeps data_dir()
+// absolute even when HOME is unset (a relative ".local/share" would otherwise
+// result). Empty only if neither source is available.
+[[nodiscard]] std::string home_dir() {
+    if (const char* home = std::getenv(kHomeEnv.data()); home != nullptr && *home != '\0') {
+        return std::string{home};
+    }
+    if (const passwd* entry = ::getpwuid(::getuid());
+        entry != nullptr && entry->pw_dir != nullptr) {
+        return std::string{entry->pw_dir};
+    }
+    return std::string{};
+}
+
 } // namespace
 
 std::filesystem::path data_dir() {
-    const std::filesystem::path home_share =
-        std::filesystem::path{env_or(kHomeEnv.data(), "")} / kLocalShareSubdir;
-    const std::filesystem::path base = env_or(kXdgDataHomeEnv.data(), home_share.string());
+    const std::string xdg = env_or(kXdgDataHomeEnv.data(), "");
+    const std::filesystem::path base = xdg.empty()
+                                           ? std::filesystem::path{home_dir()} / kLocalShareSubdir
+                                           : std::filesystem::path{xdg};
     return base / kAppId;
 }
 
