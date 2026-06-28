@@ -1,15 +1,18 @@
 #pragma once
 
-// The UI's DI root: owns the AdwApplication and, on activation, the clipboard
-// source and the MainWindow. Engine services are injected here and handed to the
-// window; captured clipboard text is recorded into the history.
+// The UI's DI root: owns a Gtk::Application (which initializes gtkmm) and, on
+// activation, the clipboard source and the MainWindow. libadwaita is initialized
+// at startup. Engine services are injected here and handed to the window;
+// captured clipboard text is recorded into the history.
 
 #include "core/HistoryService.hpp"
 #include "core/SettingsService.hpp"
 #include "ui/GdkClipboardSource.hpp"
 #include "ui/MainWindow.hpp"
 
-#include <adwaita.h>
+#include <gtkmm/application.h>
+
+#include <glibmm/refptr.h>
 
 #include <functional>
 #include <memory>
@@ -19,7 +22,7 @@ namespace copyclip::ui {
 class Application {
 public:
     Application(core::HistoryService& history, core::SettingsService& settings);
-    ~Application();
+    ~Application() = default;
 
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
@@ -33,7 +36,7 @@ private:
 
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::SettingsService> settings_;
-    AdwApplication* application_;
+    Glib::RefPtr<Gtk::Application> application_;
     std::unique_ptr<GdkClipboardSource> clipboard_;
     std::unique_ptr<MainWindow> window_;
 };

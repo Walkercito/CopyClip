@@ -22,7 +22,7 @@ namespace copyclip::ui {
 
 class MainWindow {
 public:
-    MainWindow(AdwApplication* application, core::HistoryService& history,
+    MainWindow(GtkApplication* application, core::HistoryService& history,
                core::SettingsService& settings, core::ClipboardSource& clipboard);
     ~MainWindow() = default;
 
@@ -34,7 +34,7 @@ public:
     void present();
 
 private:
-    void build_ui(AdwApplication* application);
+    void build_ui(GtkApplication* application);
     void schedule_refresh();
     void refresh();
     void copy(const std::string& content);

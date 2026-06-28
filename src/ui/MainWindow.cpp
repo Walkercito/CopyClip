@@ -18,7 +18,7 @@
 
 namespace copyclip::ui {
 
-MainWindow::MainWindow(AdwApplication* application, core::HistoryService& history,
+MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
                        core::SettingsService& settings, core::ClipboardSource& clipboard)
     : history_{history}, clipboard_{clipboard} {
     build_ui(application);
@@ -27,8 +27,8 @@ MainWindow::MainWindow(AdwApplication* application, core::HistoryService& histor
     refresh();
 }
 
-void MainWindow::build_ui(AdwApplication* application) {
-    window_ = ADW_APPLICATION_WINDOW(adw_application_window_new(GTK_APPLICATION(application)));
+void MainWindow::build_ui(GtkApplication* application) {
+    window_ = ADW_APPLICATION_WINDOW(adw_application_window_new(application));
     const std::string title{config::kAppName};
     gtk_window_set_title(GTK_WINDOW(window_), title.c_str());
     gtk_window_set_default_size(GTK_WINDOW(window_), kWindowDefaultWidth, kWindowDefaultHeight);
