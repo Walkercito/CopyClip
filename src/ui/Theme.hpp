@@ -1,8 +1,8 @@
 #pragma once
 
-// Light/dark via libadwaita's default style manager. AdwStyleManager + named
-// colors are why the GTK UI tracks the system and stays consistent, where the
-// old hand-rolled stylesheets drifted.
+// Light/dark via libadwaita's default style manager. AdwStyleManager + libadwaita
+// named colors keep the UI tracking the system light/dark setting without any
+// custom stylesheet.
 
 #include "core/Enums.hpp"
 

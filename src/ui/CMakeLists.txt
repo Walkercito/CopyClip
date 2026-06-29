@@ -1,6 +1,7 @@
 # copyclip_ui: the GTK4 + libadwaita UI layer. Links only the pure engine — never
 # Qt — so the GTK frontend stays toolkit-isolated.
 find_package(PkgConfig REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 pkg_check_modules(GTKMM REQUIRED IMPORTED_TARGET gtkmm-4.0)
 pkg_check_modules(ADWAITA REQUIRED IMPORTED_TARGET libadwaita-1)
 
@@ -35,7 +36,7 @@ add_library(copyclip::ui ALIAS copyclip_ui)
 target_include_directories(copyclip_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 target_link_libraries(copyclip_ui PUBLIC copyclip::core PkgConfig::GTKMM PkgConfig::ADWAITA)
-target_link_libraries(copyclip_ui PRIVATE copyclip::ui_text copyclip::warnings
+target_link_libraries(copyclip_ui PRIVATE copyclip::ui_text spdlog::spdlog copyclip::warnings
                                           copyclip::sanitizers)
 
 # The windowed application.

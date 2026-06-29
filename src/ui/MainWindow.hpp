@@ -1,11 +1,12 @@
 #pragma once
 
-// The main clipboard window: an AdwApplicationWindow with a header (search +
-// Clear) and a Gtk::Stack that shows either the boxed-list of clip cards or an
-// empty / no-results page. Encapsulates the libadwaita C widgets behind a small
-// C++ object. Cards are rebuilt only when the history changes; search toggles
-// each card's visibility in place. Rebuilds are deferred to an idle so a card may
-// safely trigger one from inside its own click handler.
+// The main clipboard window: an AdwApplicationWindow whose header holds the
+// Settings and Clear buttons, with a search entry above a Gtk::Stack that shows
+// either the list of clip cards or an empty / no-results page. Encapsulates the
+// libadwaita C widgets behind a small C++ object. Cards are rebuilt only when the
+// history changes; search toggles each card's visibility in place. Rebuilds are
+// deferred to an idle so a card may safely trigger one from inside its own click
+// handler.
 
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
@@ -38,7 +39,6 @@ public:
     MainWindow(MainWindow&&) = delete;
     MainWindow& operator=(MainWindow&&) = delete;
 
-    void present();
     // Show and focus the window if hidden, otherwise hide it (global-shortcut
     // relaunch toggles visibility).
     void toggle();

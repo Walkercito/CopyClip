@@ -4,6 +4,8 @@
 #include <glibmm/miscutils.h>
 #include <glibmm/spawn.h>
 
+#include <spdlog/spdlog.h>
+
 #include <string>
 #include <vector>
 
@@ -46,6 +48,7 @@ void Paster::paste() const {
             return;
         }
     }
+    spdlog::debug("auto-paste: no working input tool for this session; clip left on the clipboard");
 }
 
 } // namespace copyclip::ui

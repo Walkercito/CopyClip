@@ -1,9 +1,9 @@
 #include "ui/dialogs/FirstRunDialog.hpp"
 
-#include "core/Hotkeys.hpp"
-#include "core/Models.hpp"
 #include "ui/Constants.hpp"
+#include "ui/ShortcutText.hpp"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,19 +39,12 @@ FirstRunDialog::FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial,
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(hotkey_row_), "Open shortcut");
     gtk_widget_set_tooltip_text(GTK_WIDGET(hotkey_row_), "Press these keys to open CopyClip");
     GtkStringList* model = gtk_string_list_new(nullptr);
-    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
-        core::all_presets();
-    unsigned int selected = 0;
-    for (unsigned int i = 0; i < presets.size(); ++i) {
-        const std::string name = presets.at(i).second.display_name();
+    for (const std::string& name : hotkey_display_names()) {
         gtk_string_list_append(model, name.c_str());
-        if (presets.at(i).first == initial) {
-            selected = i;
-        }
     }
     adw_combo_row_set_model(hotkey_row_, G_LIST_MODEL(model));
     g_object_unref(model);
-    adw_combo_row_set_selected(hotkey_row_, selected);
+    adw_combo_row_set_selected(hotkey_row_, index_of_preset(initial));
     adw_preferences_group_add(ADW_PREFERENCES_GROUP(group), GTK_WIDGET(hotkey_row_));
     gtk_box_append(GTK_BOX(content), group);
 
@@ -80,11 +73,10 @@ void FirstRunDialog::on_closed(AdwDialog* /*dialog*/, gpointer self) {
 }
 
 void FirstRunDialog::finish() {
-    const unsigned int index = adw_combo_row_get_selected(hotkey_row_);
-    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
-        core::all_presets();
-    if (index < presets.size()) {
-        on_finished_(presets.at(index).first);
+    const std::optional<core::HotkeyPreset> preset =
+        preset_at(adw_combo_row_get_selected(hotkey_row_));
+    if (preset.has_value()) {
+        on_finished_(*preset);
     }
 }
 

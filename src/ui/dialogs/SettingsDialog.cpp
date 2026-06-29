@@ -1,14 +1,17 @@
 #include "ui/dialogs/SettingsDialog.hpp"
 
 #include "core/Enums.hpp"
-#include "core/Hotkeys.hpp"
 #include "core/Models.hpp"
 #include "ui/Constants.hpp"
 #include "ui/GnomeShortcut.hpp"
+#include "ui/ShortcutText.hpp"
 
 #include <adwaita.h>
 
+#include <spdlog/spdlog.h>
+
 #include <array>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -91,17 +94,7 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
 
     AdwComboRow* hotkey_row = add_combo_row(shortcut_group, "Open CopyClip");
     gtk_widget_set_tooltip_text(GTK_WIDGET(hotkey_row), "Key combination that summons the window");
-    std::vector<std::string> hotkey_names;
-    unsigned int hotkey_selected = 0;
-    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
-        core::all_presets();
-    for (unsigned int i = 0; i < presets.size(); ++i) {
-        hotkey_names.push_back(presets.at(i).second.display_name());
-        if (presets.at(i).first == current.hotkey) {
-            hotkey_selected = i;
-        }
-    }
-    fill_combo(hotkey_row, hotkey_names, hotkey_selected);
+    fill_combo(hotkey_row, hotkey_display_names(), index_of_preset(current.hotkey));
     g_signal_connect(hotkey_row, "notify::selected",
                      G_CALLBACK(&SettingsDialog::on_hotkey_selected), this);
 
@@ -144,6 +137,9 @@ void SettingsDialog::on_hotkey_selected(GObject* row, GParamSpec* /*spec*/, gpoi
 void SettingsDialog::on_shortcut_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
     static_cast<SettingsDialog*>(self)->apply_shortcut_enabled(
         adw_switch_row_get_active(ADW_SWITCH_ROW(row)) != FALSE);
+    // Registration can fail (e.g. off GNOME); make the switch reflect what actually
+    // happened rather than the user's intent, so it can't show "on" while unbound.
+    adw_switch_row_set_active(ADW_SWITCH_ROW(row), is_gnome_shortcut_registered() ? TRUE : FALSE);
 }
 
 void SettingsDialog::on_auto_hide_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
@@ -159,13 +155,12 @@ void SettingsDialog::apply_theme(unsigned int index) {
 }
 
 void SettingsDialog::apply_hotkey(unsigned int index) {
-    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
-        core::all_presets();
-    if (index >= presets.size()) {
+    const std::optional<core::HotkeyPreset> preset = preset_at(index);
+    if (!preset.has_value()) {
         return;
     }
     core::Settings updated = settings_.get().settings();
-    updated.hotkey = presets.at(index).first;
+    updated.hotkey = *preset;
     settings_.get().update(updated);
     // Only refresh the binding if the shortcut is currently enabled.
     if (is_gnome_shortcut_registered()) {
@@ -174,10 +169,11 @@ void SettingsDialog::apply_hotkey(unsigned int index) {
 }
 
 void SettingsDialog::apply_shortcut_enabled(bool active) {
-    if (active) {
-        register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
-    } else {
-        unregister_gnome_shortcut();
+    const bool ok =
+        active ? register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey)
+               : unregister_gnome_shortcut();
+    if (!ok) {
+        spdlog::warn("global shortcut could not be {}", active ? "registered" : "removed");
     }
 }
 

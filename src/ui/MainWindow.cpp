@@ -102,6 +102,9 @@ void MainWindow::build_ui(GtkApplication* application) {
     adw_header_bar_set_decoration_layout(header, decoration_layout.c_str());
     g_value_unset(&layout_value);
 
+    // libadwaita has no gtkmm binding, so its widgets (header bar, toolbar view,
+    // window) are driven through the C API; gtkmm child widgets are handed across
+    // with GTK_WIDGET(...->gobj()).
     auto* clear_button = Gtk::make_managed<Gtk::Button>();
     clear_button->set_icon_name("user-trash-symbolic");
     clear_button->set_tooltip_text("Clear unpinned history");
@@ -222,7 +225,8 @@ void MainWindow::copy(const std::string& content) {
     clipboard_.get().write(content);
     history_.get().add(content);
     const core::Settings& settings = settings_.get().settings();
-    // Auto-paste needs the window hidden so focus returns to the target window.
+    // Hide when asked (auto_hide), and also when auto-pasting so focus returns to
+    // the target window before the keystroke is sent.
     if (settings.auto_hide_on_copy || settings.auto_paste) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
     }
@@ -252,10 +256,6 @@ bool MainWindow::matches(const std::string& content) const {
     }
     return Glib::ustring{content}.lowercase().find(Glib::ustring{search_text_}.lowercase()) !=
            Glib::ustring::npos;
-}
-
-void MainWindow::present() {
-    gtk_window_present(GTK_WINDOW(window_));
 }
 
 GtkWidget* MainWindow::native() const {

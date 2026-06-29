@@ -6,6 +6,9 @@
 #include <glibmm/error.h>
 #include <glibmm/ustring.h>
 
+#include <spdlog/spdlog.h>
+
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -38,8 +41,12 @@ void write_state(const std::filesystem::path& path, const std::string& content) 
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
     std::ofstream stream{path, std::ios::binary | std::ios::trunc};
-    if (stream) {
-        stream << content;
+    stream << content;
+    if (error || !stream) {
+        // Best-effort: failing to persist just means the current clipboard may be
+        // re-captured as a duplicate next launch. Worth a breadcrumb, not a throw.
+        spdlog::debug("could not persist clipboard state to {}: {}", path.string(),
+                      error ? error.message() : "write failed");
     }
 }
 
@@ -79,21 +86,31 @@ void GdkClipboardSource::write(const std::string& text) {
 
 void GdkClipboardSource::on_changed() {
     clipboard_->read_text_async([this](Glib::RefPtr<Gio::AsyncResult>& result) {
+        Glib::ustring text;
         try {
-            const Glib::ustring text = clipboard_->read_text_finish(result);
-            // React only to a genuine content change. GdkClipboard::changed also
-            // fires on ownership changes (focus/window events) without the text
-            // changing; without this guard, clearing the history and then moving
-            // the window would re-capture the unchanged clipboard.
-            if (!text.empty() && text.raw() != last_text_) {
-                last_text_ = text.raw();
-                write_state(state_file_, text.raw());
-                if (on_change_) {
-                    on_change_(text.raw());
-                }
+            text = clipboard_->read_text_finish(result);
+        } catch (const Glib::Error& error) {
+            // Non-text content (an image, etc.) or a transient read error — skip.
+            spdlog::trace("clipboard read skipped: {}", error.what());
+            return;
+        }
+        // React only to a genuine content change. GdkClipboard::changed also fires
+        // on ownership changes (focus/window events) without the text changing;
+        // without this guard, clearing the history and then moving the window would
+        // re-capture the unchanged clipboard.
+        if (text.empty() || text.raw() == last_text_) {
+            return;
+        }
+        last_text_ = text.raw();
+        write_state(state_file_, text.raw());
+        try {
+            if (on_change_) {
+                on_change_(text.raw());
             }
-            // NOLINTNEXTLINE(bugprone-empty-catch): non-text content (an image, etc.) is expected
-        } catch (const Glib::Error&) {
+        } catch (const std::exception& error) {
+            // The callback records to the history DB; a storage failure must not
+            // escape across the GLib C callback boundary.
+            spdlog::error("failed to record clipboard entry: {}", error.what());
         }
     });
 }

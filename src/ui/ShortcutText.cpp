@@ -1,6 +1,38 @@
 #include "ui/ShortcutText.hpp"
 
+#include "core/Hotkeys.hpp"
+
+#include <utility>
+
 namespace copyclip::ui {
+
+std::vector<std::string> hotkey_display_names() {
+    std::vector<std::string> names;
+    for (const std::pair<core::HotkeyPreset, core::HotkeySpec>& entry : core::all_presets()) {
+        names.push_back(entry.second.display_name());
+    }
+    return names;
+}
+
+unsigned int index_of_preset(core::HotkeyPreset preset) {
+    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
+        core::all_presets();
+    for (unsigned int i = 0; i < presets.size(); ++i) {
+        if (presets.at(i).first == preset) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+std::optional<core::HotkeyPreset> preset_at(unsigned int index) {
+    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
+        core::all_presets();
+    if (index >= presets.size()) {
+        return std::nullopt;
+    }
+    return presets.at(index).first;
+}
 
 std::string accelerator_for(core::HotkeyPreset preset) {
     switch (preset) {

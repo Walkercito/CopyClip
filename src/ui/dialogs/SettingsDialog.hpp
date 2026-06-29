@@ -1,9 +1,11 @@
 #pragma once
 
-// Builds and presents an AdwPreferencesDialog for theme, the open shortcut, and
-// behaviour, persisting changes through the SettingsService. Applying the theme
-// live is delegated to a callback (the window owns the style manager). libadwaita
-// has no C++ binding, so the rows are driven through its C API.
+// Builds and presents a plain AdwDialog (as a bottom sheet, like the welcome
+// dialog — an AdwPreferencesDialog floats centered on a fixed-size window) holding
+// theme, the open shortcut, and behaviour rows, persisting changes through the
+// SettingsService. Applying the theme live is delegated to a callback (the window
+// owns the style manager). libadwaita has no C++ binding, so the dialog and its
+// rows are driven through its C API.
 
 #include "core/SettingsService.hpp"
 

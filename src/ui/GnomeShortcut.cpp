@@ -6,6 +6,8 @@
 #include <glibmm/miscutils.h>
 #include <glibmm/spawn.h>
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <filesystem>
 #include <string>
@@ -90,14 +92,22 @@ bool register_gnome_shortcut(const std::string& command, core::HotkeyPreset pres
     }
     const std::string binding_schema = std::string{kCustomKeybindingSchema} + ":" + kKeybindingPath;
 
-    return set_custom_keybinding_paths(paths) &&
-           run_gsettings({"set", binding_schema, "name", as_gvariant_string(kShortcutName)},
-                         nullptr) &&
-           run_gsettings({"set", binding_schema, "command", as_gvariant_string(command)},
-                         nullptr) &&
-           run_gsettings(
-               {"set", binding_schema, "binding", as_gvariant_string(accelerator_for(preset))},
-               nullptr);
+    const bool ok =
+        set_custom_keybinding_paths(paths) &&
+        run_gsettings({"set", binding_schema, "name", as_gvariant_string(kShortcutName)},
+                      nullptr) &&
+        run_gsettings({"set", binding_schema, "command", as_gvariant_string(command)}, nullptr) &&
+        run_gsettings(
+            {"set", binding_schema, "binding", as_gvariant_string(accelerator_for(preset))},
+            nullptr);
+    if (!ok) {
+        // A half-written entry (path listed but name/command/binding unset) would
+        // read as "registered" while doing nothing — roll the whole thing back.
+        spdlog::warn("global shortcut registration incomplete; rolling back");
+        unregister_gnome_shortcut();
+        return false;
+    }
+    return true;
 }
 
 bool unregister_gnome_shortcut() {
