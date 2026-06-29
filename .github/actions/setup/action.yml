@@ -1,9 +1,9 @@
 name: Set up build environment
 description: >
-  Install system dependencies (Qt6, X11, Ninja, optionally Valgrind), bootstrap
-  vcpkg with a FULL clone (a shallow clone cannot resolve the pinned
-  builtin-baseline in vcpkg.json), and cache vcpkg artifacts. Expects the calling
-  job to set the VCPKG_ROOT environment variable.
+  Install system dependencies (Qt6, GTK4/gtkmm/libadwaita, X11, Ninja, optionally
+  Valgrind), bootstrap vcpkg with a FULL clone (a shallow clone cannot resolve the
+  pinned builtin-baseline in vcpkg.json), and cache vcpkg artifacts. Expects the
+  calling job to set the VCPKG_ROOT environment variable.
 
 inputs:
   valgrind:
@@ -18,7 +18,8 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y qt6-base-dev qt6-tools-dev libgl-dev libx11-dev ninja-build
+        sudo apt-get install -y qt6-base-dev qt6-tools-dev libgtkmm-4.0-dev libadwaita-1-dev \
+          libgl-dev libx11-dev ninja-build
         if [ "${{ inputs.valgrind }}" = "true" ]; then
           sudo apt-get install -y valgrind
         fi
