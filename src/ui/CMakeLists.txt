@@ -14,7 +14,7 @@ foreach(toolkit PkgConfig::GTKMM PkgConfig::ADWAITA)
 endforeach()
 
 # Pure presentation logic (no GTK) — its own library so it unit-tests headless.
-add_library(copyclip_ui_text STATIC ClipText.cpp ShortcutText.cpp)
+add_library(copyclip_ui_text STATIC ClipText.cpp ShortcutText.cpp Fuzzy.cpp)
 add_library(copyclip::ui_text ALIAS copyclip_ui_text)
 target_include_directories(copyclip_ui_text PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(copyclip_ui_text PUBLIC copyclip::core)

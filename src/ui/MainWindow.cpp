@@ -2,6 +2,7 @@
 
 #include "config/Constants.hpp"
 #include "ui/Constants.hpp"
+#include "ui/Fuzzy.hpp"
 #include "ui/Theme.hpp"
 #include "ui/widgets/ClipCard.hpp"
 
@@ -259,8 +260,9 @@ bool MainWindow::matches(const std::string& content) const {
     if (search_text_.empty()) {
         return true;
     }
-    return Glib::ustring{content}.lowercase().find(Glib::ustring{search_text_}.lowercase()) !=
-           Glib::ustring::npos;
+    // Fuzzy subsequence match, case-folded through Glib for Unicode correctness.
+    return fuzzy_matches(Glib::ustring{search_text_}.lowercase().raw(),
+                         Glib::ustring{content}.lowercase().raw());
 }
 
 GtkWidget* MainWindow::native() const {
