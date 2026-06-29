@@ -248,4 +248,16 @@ TEST(HistoryServiceTest, AddingEmptyImageIsIgnored) {
     EXPECT_TRUE(harness.service.entries().empty());
 }
 
+// A rejected add (blank text or empty image) must not fire subscribers — the early
+// returns happen before notify().
+TEST(HistoryServiceTest, RejectedAddDoesNotNotify) {
+    ServiceHarness harness;
+    int calls = 0;
+    const auto sub = harness.service.subscribe([&calls] { ++calls; });
+    EXPECT_FALSE(harness.service.add("   "));
+    EXPECT_FALSE(
+        harness.service.add(copyclip::core::ClipContent{.kind = copyclip::core::ClipKind::Image}));
+    EXPECT_EQ(calls, 0);
+}
+
 } // namespace

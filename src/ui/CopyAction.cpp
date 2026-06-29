@@ -4,6 +4,8 @@
 
 #include <glibmm/main.h>
 
+#include <spdlog/spdlog.h>
+
 namespace copyclip::ui {
 
 namespace {
@@ -21,7 +23,12 @@ CopyAction::~CopyAction() {
 }
 
 bool CopyAction::run(const core::ClipContent& content) {
-    clipboard_.get().write(content);
+    if (!clipboard_.get().write(content)) {
+        // The clipboard rejected the write; don't record it or hide the window, so
+        // the user isn't misled into thinking the copy succeeded.
+        spdlog::warn("clipboard write failed; clip not recorded");
+        return false;
+    }
     history_.get().add(content);
     const core::Settings& settings = settings_.get().settings();
     if (settings.auto_paste) {

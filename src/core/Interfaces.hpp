@@ -50,7 +50,8 @@ public:
     virtual void start(std::function<void(const ClipContent&)> on_change) = 0;
     virtual void stop() = 0;
     [[nodiscard]] virtual std::optional<std::string> read() const = 0;
-    virtual void write(const ClipContent& content) = 0;
+    // Put `content` on the clipboard; returns whether it was set successfully.
+    virtual bool write(const ClipContent& content) = 0;
 };
 
 // A global hotkey listener. rebind() returns whether the new grab succeeded.

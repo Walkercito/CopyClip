@@ -32,7 +32,7 @@ public:
     void start(std::function<void(const core::ClipContent&)> on_change) override;
     void stop() override;
     [[nodiscard]] std::optional<std::string> read() const override;
-    void write(const core::ClipContent& content) override;
+    bool write(const core::ClipContent& content) override;
 
 private:
     void handle_change();

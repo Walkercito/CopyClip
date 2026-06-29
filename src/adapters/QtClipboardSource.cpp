@@ -38,9 +38,10 @@ std::optional<std::string> QtClipboardSource::read() const {
     return text.toStdString();
 }
 
-void QtClipboardSource::write(const core::ClipContent& content) {
+bool QtClipboardSource::write(const core::ClipContent& content) {
     // Legacy Qt path: text only (the GTK app carries rich text and images).
     clipboard_->setText(QString::fromStdString(content.text));
+    return true;
 }
 
 void QtClipboardSource::handle_change() {

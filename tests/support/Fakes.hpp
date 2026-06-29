@@ -51,9 +51,10 @@ struct FakeClipboardSource final : public core::ClipboardSource {
 
     [[nodiscard]] std::optional<std::string> read() const override { return text; }
 
-    void write(const core::ClipContent& content) override {
+    bool write(const core::ClipContent& content) override {
         written = content;
         text = content.text;
+        return true;
     }
 
     // Update the contents and notify the registered listener, if any.

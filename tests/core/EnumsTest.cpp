@@ -52,6 +52,10 @@ TEST(EnumsTest, ToStringMatchesReferenceValues) {
     EXPECT_EQ(core::to_string(core::HotkeyPreset::CtrlAltV), "ctrl_alt_v");
     EXPECT_EQ(core::to_string(core::HotkeyPreset::SuperC), "super_c");
     EXPECT_EQ(core::to_string(core::HotkeyPreset::CtrlShiftV), "ctrl_shift_v");
+
+    EXPECT_EQ(core::to_string(core::ClipKind::Text), "text");
+    EXPECT_EQ(core::to_string(core::ClipKind::RichText), "richtext");
+    EXPECT_EQ(core::to_string(core::ClipKind::Image), "image");
 }
 
 // from_string round-trip for every enumerator (StrEnum's value<->member map).
@@ -79,6 +83,10 @@ TEST(EnumsTest, FromStringRoundTripsEveryEnumerator) {
     expect_round_trip(core::HotkeyPreset::SuperC, "super_c", core::hotkey_preset_from_string);
     expect_round_trip(core::HotkeyPreset::CtrlShiftV, "ctrl_shift_v",
                       core::hotkey_preset_from_string);
+
+    expect_round_trip(core::ClipKind::Text, "text", core::clip_kind_from_string);
+    expect_round_trip(core::ClipKind::RichText, "richtext", core::clip_kind_from_string);
+    expect_round_trip(core::ClipKind::Image, "image", core::clip_kind_from_string);
 }
 
 // Unknown values yield std::nullopt — the replacement for StrEnum's raise.

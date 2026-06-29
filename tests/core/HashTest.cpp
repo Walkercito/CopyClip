@@ -27,4 +27,11 @@ TEST(HashTest, EmptyHashIsStableAndSized) {
     EXPECT_EQ(content_hash({}), content_hash({}));
 }
 
+// Golden vector: pins the exact algorithm + hex encoding. A change to the digest
+// would orphan every stored image blob (the hash is the images-table key).
+TEST(HashTest, GoldenVectorPinsTheAlgorithm) {
+    const std::vector<std::byte> abc{std::byte{'a'}, std::byte{'b'}, std::byte{'c'}};
+    EXPECT_EQ(content_hash(abc), "e71fa2190541574b"); // FNV-1a 64-bit of "abc"
+}
+
 } // namespace

@@ -34,6 +34,10 @@ namespace copyclip::ui {
 namespace {
 
 constexpr const char* kMimeHtml = "text/html";
+constexpr const char* kMimePng = "image/png";
+constexpr const char* kMimeJpeg = "image/jpeg";
+constexpr const char* kMimeBmp = "image/bmp";
+constexpr const char* kMimeTiff = "image/tiff";
 constexpr gsize kStreamChunk = 4096;
 
 [[nodiscard]] Glib::RefPtr<Gdk::Clipboard> default_clipboard() {
@@ -73,7 +77,11 @@ void write_state(const std::filesystem::path& path, const std::string& content) 
         Glib::RefPtr<Glib::Bytes> chunk;
         try {
             chunk = stream->read_bytes(kStreamChunk, {});
-        } catch (const Glib::Error&) {
+        } catch (const Glib::Error& error) {
+            // A failure here (vs the EOF break below) may leave the HTML empty or
+            // truncated; surface it rather than swallowing it silently.
+            spdlog::warn("clipboard HTML stream read failed after {} bytes: {}", result.size(),
+                         error.what());
             break;
         }
         if (!chunk) {
@@ -139,7 +147,7 @@ std::optional<std::string> GdkClipboardSource::read() const {
     return last_text_;
 }
 
-void GdkClipboardSource::write(const core::ClipContent& content) {
+bool GdkClipboardSource::write(const core::ClipContent& content) {
     switch (content.kind) {
     case core::ClipKind::Image: {
         try {
@@ -148,10 +156,11 @@ void GdkClipboardSource::write(const core::ClipContent& content) {
             clipboard_->set_texture(Gdk::Texture::create_from_bytes(bytes));
             last_image_hash_ = core::content_hash(content.image);
             last_text_.reset();
+            return true;
         } catch (const Glib::Error& error) {
             spdlog::error("failed to write image to clipboard: {}", error.what());
+            return false;
         }
-        break;
     }
     case core::ClipKind::RichText: {
         Glib::Value<Glib::ustring> text_value;
@@ -164,26 +173,25 @@ void GdkClipboardSource::write(const core::ClipContent& content) {
             Gdk::ContentProvider::create(std::vector<Glib::RefPtr<Gdk::ContentProvider>>{
                 Gdk::ContentProvider::create(kMimeHtml, html_bytes),
                 Gdk::ContentProvider::create(text_value)});
-        clipboard_->set_content(provider);
         last_text_ = content.text;
         last_image_hash_.clear();
-        break;
+        return clipboard_->set_content(provider);
     }
     case core::ClipKind::Text:
         clipboard_->set_text(content.text);
         last_text_ = content.text;
         last_image_hash_.clear();
-        break;
+        return true;
     }
+    return false; // unreachable: every ClipKind is handled above
 }
 
 void GdkClipboardSource::on_changed() {
     const Glib::RefPtr<const Gdk::ContentFormats> formats = clipboard_->get_formats();
     const bool has_image =
-        formats &&
-        (formats->contain_gtype(Gdk::Texture::get_base_type()) ||
-         formats->contain_mime_type("image/png") || formats->contain_mime_type("image/jpeg") ||
-         formats->contain_mime_type("image/bmp") || formats->contain_mime_type("image/tiff"));
+        formats && (formats->contain_gtype(Gdk::Texture::get_base_type()) ||
+                    formats->contain_mime_type(kMimePng) || formats->contain_mime_type(kMimeJpeg) ||
+                    formats->contain_mime_type(kMimeBmp) || formats->contain_mime_type(kMimeTiff));
     const bool has_html = formats && formats->contain_mime_type(kMimeHtml);
     if (has_image) {
         read_image();
@@ -231,7 +239,8 @@ void GdkClipboardSource::read_rich_text() {
             std::string text;
             try {
                 text = clipboard_->read_text_finish(text_result).raw();
-            } catch (const Glib::Error&) {
+            } catch (const Glib::Error& error) {
+                spdlog::trace("rich-text plain-text read skipped: {}", error.what());
                 return;
             }
             if (text.empty() || text == last_text_) {
@@ -248,7 +257,11 @@ void GdkClipboardSource::read_rich_text() {
                     Glib::RefPtr<Gio::InputStream> stream;
                     try {
                         stream = clipboard_->read_finish(html_result, chosen_mime);
-                    } catch (const Glib::Error&) {
+                    } catch (const Glib::Error& error) {
+                        // The clipboard advertised text/html but the read failed; we
+                        // store the clip as plain text, so leave a breadcrumb.
+                        spdlog::warn("clipboard text/html read failed; storing as plain text: {}",
+                                     error.what());
                         stream.reset();
                     }
                     if (stream) {

@@ -4,13 +4,14 @@
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
 
+#include <spdlog/spdlog.h>
+
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <format>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -280,15 +281,14 @@ std::vector<core::ClipboardEntry> SqliteHistoryRepository::all() const {
         const std::string created_at_text = statement.getColumn(kColCreatedAt).getString();
         const std::optional<std::chrono::system_clock::time_point> created_at =
             parse_iso8601(created_at_text);
-        if (!created_at) {
-            throw std::runtime_error{"SqliteHistoryRepository: malformed created_at timestamp '" +
-                                     created_at_text + "'"};
-        }
         const std::string kind_text = statement.getColumn(kColKind).getString();
         const std::optional<core::ClipKind> kind = core::clip_kind_from_string(kind_text);
-        if (!kind) {
-            throw std::runtime_error{"SqliteHistoryRepository: unknown clip kind '" + kind_text +
-                                     "'"};
+        if (!created_at || !kind) {
+            // One corrupt row (a manual edit, or a kind written by a newer version)
+            // must not make the whole history unreadable — skip it, leaving a trail.
+            spdlog::warn("skipping malformed history row: created_at='{}' kind='{}'",
+                         created_at_text, kind_text);
+            continue;
         }
         // Image bytes stay lazy: left empty here, fetched on demand via image().
         entries.push_back(core::ClipboardEntry{

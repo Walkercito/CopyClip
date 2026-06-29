@@ -196,4 +196,53 @@ TEST_F(SqliteHistoryRepositoryTest, MigratesPreRichContentSchema) {
     EXPECT_TRUE(entries[0].pinned);
 }
 
+// clear_unpinned drops the blobs of unpinned image entries but preserves a pinned
+// image's blob and row (guarding the WHERE pinned = 0 subquery and its ordering).
+TEST_F(SqliteHistoryRepositoryTest, ClearUnpinnedDropsUnpinnedImageBlobsKeepsPinned) {
+    const std::vector<std::byte> keep{std::byte{0x0A}, std::byte{0x0B}};
+    const std::vector<std::byte> drop{std::byte{0x0C}, std::byte{0x0D}};
+    auto repository = repo();
+    repository.add(core::ClipboardEntry{.kind = core::ClipKind::Image,
+                                        .content = "keep",
+                                        .image = keep,
+                                        .created_at = date_utc(2026, 1, 1),
+                                        .pinned = true});
+    repository.add(core::ClipboardEntry{.kind = core::ClipKind::Image,
+                                        .content = "drop",
+                                        .image = drop,
+                                        .created_at = date_utc(2026, 1, 2),
+                                        .pinned = false});
+    repository.clear_unpinned();
+
+    EXPECT_TRUE(repository.image("drop").empty()); // orphan blob removed
+    EXPECT_EQ(repository.image("keep"), keep);     // pinned blob preserved
+    const std::vector<core::ClipboardEntry> entries = repository.all();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries.front().content, "keep");
+}
+
+// A corrupt row (bad timestamp or unknown kind) is skipped, not thrown on, so a
+// single bad row can't make the whole history unreadable.
+TEST_F(SqliteHistoryRepositoryTest, SkipsMalformedRowsInsteadOfThrowing) {
+    {
+        SQLite::Database old{db_path(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
+        old.exec(
+            "CREATE TABLE entries (content TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'text', "
+            "html TEXT NOT NULL DEFAULT '', image_width INTEGER NOT NULL DEFAULT 0, "
+            "image_height INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, "
+            "pinned INTEGER NOT NULL DEFAULT 0)");
+        old.exec("INSERT INTO entries (content, kind, created_at) "
+                 "VALUES ('good', 'text', '2026-01-01T00:00:00')");
+        old.exec("INSERT INTO entries (content, kind, created_at) "
+                 "VALUES ('badtime', 'text', 'not-a-date')");
+        old.exec("INSERT INTO entries (content, kind, created_at) "
+                 "VALUES ('badkind', 'martian', '2026-01-01T00:00:00')");
+    }
+    auto repository = repo();
+
+    const std::vector<core::ClipboardEntry> entries = repository.all(); // never throws
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries.front().content, "good");
+}
+
 } // namespace
