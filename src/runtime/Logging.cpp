@@ -2,6 +2,7 @@
 
 #include "config/Constants.hpp"
 
+#include <spdlog/cfg/env.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
@@ -28,6 +29,9 @@ void configure_logging(spdlog::level::level_enum level) {
         spdlog::set_default_logger(logger);
     }
     logger->set_level(level);
+    // Allow the level to be raised/lowered from the environment, e.g.
+    // SPDLOG_LEVEL=debug, without a rebuild.
+    spdlog::cfg::load_env_levels();
 }
 
 } // namespace copyclip::runtime
