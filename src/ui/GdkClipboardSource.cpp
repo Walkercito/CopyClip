@@ -34,10 +34,6 @@ namespace copyclip::ui {
 namespace {
 
 constexpr const char* kMimeHtml = "text/html";
-constexpr const char* kMimePng = "image/png";
-constexpr const char* kMimeJpeg = "image/jpeg";
-constexpr const char* kMimeBmp = "image/bmp";
-constexpr const char* kMimeTiff = "image/tiff";
 constexpr gsize kStreamChunk = 4096;
 
 [[nodiscard]] Glib::RefPtr<Gdk::Clipboard> default_clipboard() {
@@ -187,15 +183,19 @@ bool GdkClipboardSource::write(const core::ClipContent& content) {
 }
 
 void GdkClipboardSource::on_changed() {
+    // get_formats() is unreliable at this instant on X11: ownership changes before
+    // the TARGETS list is parsed, so an image (e.g. a screenshot) may not yet appear
+    // in the formats. Rather than sniff, try reading an image first; a failed texture
+    // read means it isn't an image, so we fall back to text. This reliably catches
+    // screenshots, where sniffing the formats would miss them.
+    read_image();
+}
+
+void GdkClipboardSource::read_text_or_rich() {
+    // Reached after a failed texture read. By now the format list has been negotiated
+    // (the texture attempt forced the round-trip), so the HTML check is reliable here.
     const Glib::RefPtr<const Gdk::ContentFormats> formats = clipboard_->get_formats();
-    const bool has_image =
-        formats && (formats->contain_gtype(Gdk::Texture::get_base_type()) ||
-                    formats->contain_mime_type(kMimePng) || formats->contain_mime_type(kMimeJpeg) ||
-                    formats->contain_mime_type(kMimeBmp) || formats->contain_mime_type(kMimeTiff));
-    const bool has_html = formats && formats->contain_mime_type(kMimeHtml);
-    if (has_image) {
-        read_image();
-    } else if (has_html) {
+    if (formats && formats->contain_mime_type(kMimeHtml)) {
         read_rich_text();
     } else {
         read_plain_text();
@@ -290,18 +290,25 @@ void GdkClipboardSource::read_image() {
             Glib::RefPtr<Gdk::Texture> texture;
             try {
                 texture = clipboard_->read_texture_finish(result);
-            } catch (const Glib::Error& error) {
-                spdlog::trace("clipboard image read skipped: {}", error.what());
+            } catch (const Glib::Error&) {
+                // No image on the clipboard (it holds text) — fall back to text.
+                read_text_or_rich();
                 return;
             }
             if (!texture) {
+                read_text_or_rich();
                 return;
             }
             const Glib::RefPtr<Glib::Bytes> png = texture->save_to_png_bytes();
             if (!png) {
+                spdlog::warn("failed to encode clipboard image to PNG; skipping it");
                 return;
             }
             std::vector<std::byte> bytes = to_bytes(png);
+            if (bytes.empty()) {
+                spdlog::warn("clipboard image encoded to zero bytes; skipping it");
+                return;
+            }
             const std::string hash = core::content_hash(bytes);
             if (hash == last_image_hash_) {
                 return;

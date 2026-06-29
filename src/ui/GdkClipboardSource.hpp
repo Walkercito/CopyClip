@@ -44,6 +44,7 @@ private:
     // then plain text. Each reads asynchronously and delivers a ClipContent.
     void on_changed();
     void read_image();
+    void read_text_or_rich();
     void read_rich_text();
     void read_plain_text();
 
