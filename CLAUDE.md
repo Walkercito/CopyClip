@@ -4,10 +4,16 @@ A clipboard manager for Linux (X11 + Wayland). The shipping app is **C++**: a pu
 with Qt/X11 adapters and a **GTK4 + libadwaita** UI. This file defines its non-negotiable
 principles, toolchain, and conventions. They are not suggestions.
 
-The Python code in this repository — the engine, plus the archived UI under
-`reference/pyqt6-ui/` — is the **validated reference**: a working, fully-tested design that the
-C++ port mirrors. It is not the shipping target; the port is executed from a separate
-migration plan.
+This repository is the **standalone working copy** for the C++ port — develop here
+directly (there is no separate parent checkout). The Python code it also carries — the
+engine, plus the archived PyQt6 UI under `reference/pyqt6-ui/` — is the **validated
+reference**: a working, fully-tested design the C++ port mirrors. It is not the shipping
+target; the port is executed from a separate migration plan.
+
+## Reference implementations — consult before designing clipboard behavior
+
+- **Python reference (this repo)** — the validated design described above; the C++
+  port mirrors it.
 
 ## Non-negotiable principles
 
@@ -32,8 +38,30 @@ pure engine (`core/` · `storage/` · `runtime/`) plus the adapters it needs —
 never pulls in Qt.
 
 Layout: `core/` (pure domain + application logic) · `storage/` (concrete repositories) ·
-`adapters/` (Qt, Xlib, portal, GTK clipboard — the only impure layer) · `runtime/` (process
-glue) · `config/` (constants) · `ui/` (GTK4 + libadwaita UI).
+`adapters/` (Qt, Xlib, portal — the only impure non-UI layer) · `runtime/` (process glue) ·
+`config/` (constants) · `ui/` (GTK4 + libadwaita UI, including the clipboard sources).
+
+### Clipboard capture — the X11/XWayland selection backend (critical)
+
+`core::ClipboardSource` has one implementation, `ui/GdkClipboardSource` (GTK
+`Gdk::Clipboard`), used for **both** X11 and Wayland sessions — X11 selections need no
+window focus, so the GTK clipboard works for a background manager.
+
+On Wayland it rides **XWayland**: `main.cpp` forces `GDK_BACKEND=x11` whenever a
+`DISPLAY` exists, so GTK talks to the X11 selection, which the compositor mirrors to
+and from the Wayland clipboard. This is required because GNOME's Mutter exposes no
+`wlr`/`ext-data-control` protocol — the only focus-free way to read a Wayland clipboard
+in the background — so a native `wl_data_device` clipboard would capture only while
+focused.
+
+Capture is **event-driven** (`Gdk::Clipboard::signal_changed`, no polling). Reads are
+asynchronous: an image (`read_texture_async`) is tried first, else text, else rich text
+— and the `text/html` stream is drained with `splice_async`, because a synchronous read
+would block the GLib main loop the X11/INCR transfer depends on and deadlock the UI.
+Pasting into the previously-focused window (`ui/KeystrokePaster`, when auto-paste is on)
+injects Ctrl+V through a transient `/dev/uinput` virtual keyboard — kernel-level, so it
+reaches X11 and Wayland apps alike; it needs `/dev/uinput` write access (the `input`
+group), falling back to `xdotool`/`wtype`/`ydotool`.
 
 ## Toolchain
 
@@ -111,7 +139,7 @@ glibmm-2.68 2.78.1 · libX11 1.8.7 · Valgrind 3.22.0.
 ### Testing & hooks
 - **GoogleTest + CTest** (per the `cpp-testing` skill). `core/` and `storage/` are covered
   headless with fakes; a change to `core/` ships with tests.
-- Edit hooks mirror the reference project's: **clang-format** + **clang-tidy** run on every
+- Edit hooks run **clang-format** + **clang-tidy** on every
   edited `.cpp`/`.hpp`, and the suite runs under sanitizers. Do not fight them — fix what they
   surface.
 
