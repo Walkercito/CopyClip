@@ -10,17 +10,31 @@
 #include <giomm/simpleaction.h>
 #include <glibmm/main.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <utility>
 
 namespace copyclip::ui {
 
+namespace {
+
+// Opt-in dev/test escape hatch (COPYCLIP_STANDALONE=1): run with no single-instance
+// registration, so a freshly-built binary can run alongside an installed copy
+// instead of becoming a remote instance of it (which would just exit immediately).
+[[nodiscard]] Gio::Application::Flags app_flags() {
+    const char* standalone = std::getenv("COPYCLIP_STANDALONE");
+    return (standalone != nullptr && *standalone != '\0') ? Gio::Application::Flags::NON_UNIQUE
+                                                          : Gio::Application::Flags::DEFAULT_FLAGS;
+}
+
+} // namespace
+
 Application::Application(core::HistoryService& history, core::SettingsService& settings,
                          std::filesystem::path clipboard_state_file)
     : history_{history}, settings_{settings},
       clipboard_state_file_{std::move(clipboard_state_file)}, paster_{core::detect_session()},
-      application_{Gtk::Application::create(std::string{kApplicationId})} {
+      application_{Gtk::Application::create(std::string{kApplicationId}, app_flags())} {
     application_->signal_startup().connect([] { adw_init(); });
     application_->signal_activate().connect(sigc::mem_fun(*this, &Application::on_activate));
 
