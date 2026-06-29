@@ -1,6 +1,7 @@
 #include "ui/MainWindow.hpp"
 
 #include "config/Constants.hpp"
+#include "core/Platform.hpp"
 #include "ui/Constants.hpp"
 #include "ui/Theme.hpp"
 #include "ui/widgets/ClipCard.hpp"
@@ -24,6 +25,7 @@ namespace copyclip::ui {
 namespace {
 
 constexpr int kPlaceholderIconSize = 48;
+constexpr unsigned int kPasteDelayMs = 120;
 constexpr const char* kPageList = "list";
 constexpr const char* kPageEmpty = "empty";
 
@@ -43,7 +45,8 @@ constexpr const char* kPageEmpty = "empty";
 
 MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
                        core::SettingsService& settings, core::ClipboardSource& clipboard)
-    : history_{history}, clipboard_{clipboard}, settings_{settings} {
+    : history_{history}, clipboard_{clipboard}, settings_{settings},
+      paster_{core::detect_session()} {
     build_ui(application);
     history_.get().subscribe([this] { schedule_refresh(); });
     apply_theme(settings.settings().theme);
@@ -218,8 +221,14 @@ void MainWindow::apply_filter() {
 void MainWindow::copy(const std::string& content) {
     clipboard_.get().write(content);
     history_.get().add(content);
-    if (settings_.get().settings().auto_hide_on_copy) {
+    const core::Settings& settings = settings_.get().settings();
+    // Auto-paste needs the window hidden so focus returns to the target window.
+    if (settings.auto_hide_on_copy || settings.auto_paste) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+    }
+    if (settings.auto_paste) {
+        // Give focus time to return before sending the paste keystroke.
+        Glib::signal_timeout().connect_once([this] { paster_.paste(); }, kPasteDelayMs);
     }
 }
 

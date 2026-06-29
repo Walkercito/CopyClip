@@ -105,14 +105,25 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     g_signal_connect(hotkey_row, "notify::selected",
                      G_CALLBACK(&SettingsDialog::on_hotkey_selected), this);
 
+    AdwPreferencesGroup* behaviour_group = add_group(page, "Behaviour");
+
     auto* auto_hide_row = ADW_SWITCH_ROW(adw_switch_row_new());
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(auto_hide_row), "Hide after copying");
     gtk_widget_set_tooltip_text(GTK_WIDGET(auto_hide_row),
                                 "Hide the window right after you pick a clip");
     adw_switch_row_set_active(auto_hide_row, static_cast<gboolean>(current.auto_hide_on_copy));
-    adw_preferences_group_add(add_group(page, "Behaviour"), GTK_WIDGET(auto_hide_row));
+    adw_preferences_group_add(behaviour_group, GTK_WIDGET(auto_hide_row));
     g_signal_connect(auto_hide_row, "notify::active",
                      G_CALLBACK(&SettingsDialog::on_auto_hide_toggled), this);
+
+    auto* auto_paste_row = ADW_SWITCH_ROW(adw_switch_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(auto_paste_row), "Auto-paste");
+    gtk_widget_set_tooltip_text(GTK_WIDGET(auto_paste_row),
+                                "Paste the clip into the focused window after copying");
+    adw_switch_row_set_active(auto_paste_row, static_cast<gboolean>(current.auto_paste));
+    adw_preferences_group_add(behaviour_group, GTK_WIDGET(auto_paste_row));
+    g_signal_connect(auto_paste_row, "notify::active",
+                     G_CALLBACK(&SettingsDialog::on_auto_paste_toggled), this);
 
     GtkWidget* toolbar = adw_toolbar_view_new();
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
@@ -173,6 +184,17 @@ void SettingsDialog::apply_shortcut_enabled(bool active) {
 void SettingsDialog::apply_auto_hide(bool active) {
     core::Settings updated = settings_.get().settings();
     updated.auto_hide_on_copy = active;
+    settings_.get().update(updated);
+}
+
+void SettingsDialog::on_auto_paste_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
+    static_cast<SettingsDialog*>(self)->apply_auto_paste(
+        adw_switch_row_get_active(ADW_SWITCH_ROW(row)) != FALSE);
+}
+
+void SettingsDialog::apply_auto_paste(bool active) {
+    core::Settings updated = settings_.get().settings();
+    updated.auto_paste = active;
     settings_.get().update(updated);
 }
 

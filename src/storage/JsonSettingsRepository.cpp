@@ -27,6 +27,7 @@ constexpr const char* kKeyHotkey = "hotkey";
 constexpr const char* kKeyFirstRunCompleted = "first_run_completed";
 constexpr const char* kKeyMaxHistoryItems = "max_history_items";
 constexpr const char* kKeyAutoHideOnCopy = "auto_hide_on_copy";
+constexpr const char* kKeyAutoPaste = "auto_paste";
 
 // Indentation width for the serialized JSON, mirroring the reference's
 // json.dumps(..., indent=2).
@@ -69,7 +70,8 @@ constexpr int kJsonIndent = 2;
         .hotkey = *hotkey,
         .first_run_completed = json.value(kKeyFirstRunCompleted, defaults.first_run_completed),
         .max_history_items = json.value(kKeyMaxHistoryItems, defaults.max_history_items),
-        .auto_hide_on_copy = json.value(kKeyAutoHideOnCopy, defaults.auto_hide_on_copy)};
+        .auto_hide_on_copy = json.value(kKeyAutoHideOnCopy, defaults.auto_hide_on_copy),
+        .auto_paste = json.value(kKeyAutoPaste, defaults.auto_paste)};
 }
 
 } // namespace
@@ -112,7 +114,8 @@ void JsonSettingsRepository::save(const core::Settings& settings) {
                                  {kKeyHotkey, core::to_string(settings.hotkey)},
                                  {kKeyFirstRunCompleted, settings.first_run_completed},
                                  {kKeyMaxHistoryItems, settings.max_history_items},
-                                 {kKeyAutoHideOnCopy, settings.auto_hide_on_copy}};
+                                 {kKeyAutoHideOnCopy, settings.auto_hide_on_copy},
+                                 {kKeyAutoPaste, settings.auto_paste}};
 
     std::filesystem::path temp_path = path_;
     temp_path.replace_extension(config::kSettingsTempSuffix);

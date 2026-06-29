@@ -10,6 +10,7 @@
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
 #include "core/SettingsService.hpp"
+#include "ui/Paster.hpp"
 #include "ui/dialogs/SettingsDialog.hpp"
 
 #include <adwaita.h>
@@ -58,6 +59,7 @@ private:
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::ClipboardSource> clipboard_;
     std::reference_wrapper<core::SettingsService> settings_;
+    Paster paster_;
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
