@@ -1,6 +1,7 @@
 #include "ui/MainWindow.hpp"
 
 #include "config/Constants.hpp"
+#include "ui/ClipText.hpp"
 #include "ui/Constants.hpp"
 #include "ui/Fuzzy.hpp"
 #include "ui/Theme.hpp"
@@ -14,10 +15,13 @@
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
 
+#include <chrono>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace copyclip::ui {
@@ -38,6 +42,26 @@ constexpr const char* kPageEmpty = "empty";
         }
     }
     return layout;
+}
+
+// Orders rows like HistoryService::sorted (pinned first, then newest first) so the
+// ListBox places an incrementally-inserted card in its right spot without a full
+// rebuild. Rows are always ClipCards; a defensive null check keeps it total.
+[[nodiscard]] int clip_card_sort(Gtk::ListBoxRow* lhs, Gtk::ListBoxRow* rhs) {
+    const auto* a = dynamic_cast<const ClipCard*>(lhs);
+    const auto* b = dynamic_cast<const ClipCard*>(rhs);
+    if (a == nullptr || b == nullptr) {
+        return 0;
+    }
+    const core::ClipboardEntry& ea = a->entry();
+    const core::ClipboardEntry& eb = b->entry();
+    if (ea.pinned != eb.pinned) {
+        return ea.pinned ? -1 : 1; // pinned rows first
+    }
+    if (ea.created_at != eb.created_at) {
+        return ea.created_at > eb.created_at ? -1 : 1; // newer first
+    }
+    return 0;
 }
 
 } // namespace
@@ -148,6 +172,9 @@ void MainWindow::build_ui(GtkApplication* application) {
     list_->set_selection_mode(Gtk::SelectionMode::NONE);
     list_->add_css_class("background");
     list_->set_valign(Gtk::Align::START);
+    // Keep rows ordered so incrementally-added cards land in place (see rebuild_cards).
+    list_->set_sort_func(
+        [](Gtk::ListBoxRow* a, Gtk::ListBoxRow* b) { return clip_card_sort(a, b); });
     scrolled->set_child(*list_);
     stack_->add(*scrolled, kPageList);
 
@@ -183,24 +210,57 @@ void MainWindow::schedule_refresh() {
 
 void MainWindow::rebuild_cards() {
     refresh_pending_ = false;
-    while (Gtk::Widget* child = list_->get_first_child()) {
-        list_->remove(*child);
-    }
-
     const std::vector<core::ClipboardEntry> entries = history_.get().entries();
     card_count_ = entries.size();
+
+    // Index the entries we want shown, by their key, for O(1) lookup below.
+    std::map<std::string, const core::ClipboardEntry*> wanted;
     for (const core::ClipboardEntry& entry : entries) {
-        // Fetch the image bytes lazily, only for image cards.
-        std::vector<std::byte> image;
+        wanted.emplace(entry.content, &entry);
+    }
+
+    // Drop focus if it sits on a row we may remove, so GTK never accounts a
+    // destroyed focused/active child (the "Broken accounting of active state"
+    // warning). The search entry lives outside the list, so its focus is untouched.
+    if (GtkWidget* focus = gtk_window_get_focus(GTK_WINDOW(window_));
+        focus != nullptr && gtk_widget_is_ancestor(focus, GTK_WIDGET(list_->gobj())) != FALSE) {
+        gtk_window_set_focus(GTK_WINDOW(window_), nullptr);
+    }
+
+    // Remove cards that are gone, or whose displayed data (pin or timestamp)
+    // changed — those few are recreated below; every unchanged card is reused.
+    for (auto it = cards_.begin(); it != cards_.end();) {
+        const auto found = wanted.find(it->first);
+        const core::ClipboardEntry& shown = it->second->entry();
+        const bool stale = found == wanted.end() || found->second->pinned != shown.pinned ||
+                           found->second->created_at != shown.created_at;
+        if (stale) {
+            list_->remove(*it->second);
+            it = cards_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Add a card only for entries that lack one. The sort function drops each new
+    // row into its ordered position, so no existing card is rebuilt.
+    for (const core::ClipboardEntry& entry : entries) {
+        if (cards_.contains(entry.content)) {
+            continue;
+        }
+        std::vector<std::byte> image; // fetched lazily, only for image cards
         if (entry.kind == core::ClipKind::Image) {
             image = history_.get().image(entry.content);
         }
-        list_->append(*Gtk::make_managed<ClipCard>(
+        auto* card = Gtk::make_managed<ClipCard>(
             entry, std::move(image), kMaxPreviewChars,
             [this](const core::ClipboardEntry& clip) { copy(clip); },
-            [this](const core::ClipboardEntry& clip) { pin(clip.content); }));
+            [this](const core::ClipboardEntry& clip) { pin(clip.content); });
+        list_->append(*card);
+        cards_.emplace(entry.content, card);
     }
 
+    list_->invalidate_sort();
     apply_filter();
 }
 
@@ -279,8 +339,10 @@ bool MainWindow::matches(const std::string& content) const {
         return true;
     }
     // Fuzzy subsequence match, case-folded through Glib for Unicode correctness.
+    // Sanitize the content first: a legacy clip may hold invalid UTF-8, which
+    // Glib::ustring's case-folding rejects.
     return fuzzy_matches(Glib::ustring{search_text_}.lowercase().raw(),
-                         Glib::ustring{content}.lowercase().raw());
+                         Glib::ustring{make_valid_utf8(content)}.lowercase().raw());
 }
 
 GtkWidget* MainWindow::native() const {

@@ -36,6 +36,10 @@ public:
     // The entry's dedup key (its text, or an image hash) — the window filters on it.
     [[nodiscard]] const std::string& content() const { return entry_.content; }
 
+    // The full entry this card was built from, so the window can reconcile the list
+    // incrementally — detecting a pin/timestamp change without rebuilding every card.
+    [[nodiscard]] const core::ClipboardEntry& entry() const { return entry_; }
+
 private:
     void render_text();
     void toggle_expand();

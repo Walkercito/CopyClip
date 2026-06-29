@@ -3,10 +3,12 @@
 // The main clipboard window: an AdwApplicationWindow whose header holds the
 // Settings and Clear buttons, with a search entry above a Gtk::Stack that shows
 // either the list of clip cards or an empty / no-results page. Encapsulates the
-// libadwaita C widgets behind a small C++ object. Cards are rebuilt only when the
-// history changes; search toggles each card's visibility in place. Rebuilds are
-// deferred to an idle so a card may safely trigger one from inside its own click
-// handler.
+// libadwaita C widgets behind a small C++ object. On each history change the list
+// is reconciled incrementally — only added, removed, or changed (pin/timestamp)
+// cards are touched, and a ListBox sort function repositions rows — so a single
+// new clip touches one widget, not all N. Search toggles each card's visibility in
+// place. Refreshes are deferred to an idle so a card may safely trigger one from
+// inside its own click handler.
 
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
@@ -24,10 +26,13 @@
 
 #include <cstddef>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 
 namespace copyclip::ui {
+
+class ClipCard;
 
 class MainWindow {
 public:
@@ -66,6 +71,10 @@ private:
     AdwApplicationWindow* window_ = nullptr;
     Gtk::Stack* stack_ = nullptr;
     Gtk::ListBox* list_ = nullptr;
+    // Live cards keyed by their clip content, for incremental reconciliation. The
+    // cards are owned by `list_`; these are non-owning observers kept in sync with
+    // it (an entry is erased the moment its card is removed from the list).
+    std::map<std::string, ClipCard*> cards_;
     Gtk::SearchEntry* search_ = nullptr;
     Gtk::Label* empty_title_ = nullptr;
     Gtk::Label* empty_description_ = nullptr;
