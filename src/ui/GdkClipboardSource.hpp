@@ -11,6 +11,7 @@
 #include <gdkmm/clipboard.h>
 
 #include <giomm/cancellable.h>
+#include <giomm/inputstream.h>
 #include <glibmm/refptr.h>
 #include <sigc++/connection.h>
 
@@ -47,6 +48,17 @@ private:
     void read_text_or_rich();
     void read_rich_text();
     void read_plain_text();
+
+    // Record `text` as the current dedup key and persist it (clearing any image
+    // key): the bookkeeping shared by every plain-text / rich-text capture path.
+    void remember_text(const std::string& text);
+
+    // Drain a clipboard data stream (e.g. text/html) into a string ASYNCHRONOUSLY,
+    // then invoke `done`. A synchronous read would block the GLib main loop that
+    // the X11 selection (INCR) transfer itself depends on — deadlocking the UI.
+    // `done` is a one-shot sink, taken by value and moved into the async callback.
+    void drain_stream_async(const Glib::RefPtr<Gio::InputStream>& stream,
+                            std::function<void(std::string)> done);
 
     // Hand a captured clip to on_change_, swallowing (and logging) any storage
     // error so it never crosses the GLib C callback boundary.

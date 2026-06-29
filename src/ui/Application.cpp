@@ -31,9 +31,10 @@ namespace {
 } // namespace
 
 Application::Application(core::HistoryService& history, core::SettingsService& settings,
-                         std::filesystem::path clipboard_state_file)
+                         std::filesystem::path clipboard_state_file, bool start_hidden)
     : history_{history}, settings_{settings},
-      clipboard_state_file_{std::move(clipboard_state_file)}, paster_{core::detect_session()},
+      clipboard_state_file_{std::move(clipboard_state_file)}, start_hidden_{start_hidden},
+      paster_{core::detect_session()},
       application_{Gtk::Application::create(std::string{kApplicationId}, app_flags())} {
     application_->signal_startup().connect([] { adw_init(); });
     application_->signal_activate().connect(sigc::mem_fun(*this, &Application::on_activate));
@@ -52,7 +53,14 @@ int Application::run(int argc, char** argv) {
 void Application::on_activate() {
     // Built once; later activations (a relaunch from the global shortcut) just
     // toggle the existing window.
+    const bool first_activation = !window_;
     if (!window_) {
+        // One clipboard backend for X11 and Wayland alike: GTK's X11 selection
+        // clipboard. X11 selections need no focus, and on Wayland the app runs on
+        // XWayland (forced in main()), which the compositor mirrors to and from the
+        // Wayland clipboard. GNOME exposes no wlr/ext-data-control protocol, so this
+        // XWayland route — the one the arboard-based reference uses on GNOME — is the
+        // only focus-free path; it is event-driven and spawns no helper processes.
         clipboard_ = std::make_unique<GdkClipboardSource>(clipboard_state_file_);
         window_ = std::make_unique<MainWindow>(application_->gobj(), history_.get(),
                                                settings_.get(), *clipboard_, paster_);
@@ -73,6 +81,11 @@ void Application::on_activate() {
                 register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);
             }
         });
+    }
+    // A background autostart builds the window and starts capturing but stays
+    // hidden — except on first run, when the setup dialog needs a visible window.
+    if (first_activation && start_hidden_ && !settings_.get().is_first_run()) {
+        return;
     }
     window_->toggle();
 }

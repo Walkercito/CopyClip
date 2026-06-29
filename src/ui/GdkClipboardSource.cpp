@@ -9,6 +9,8 @@
 
 #include <giomm/asyncresult.h>
 #include <giomm/inputstream.h>
+#include <giomm/memoryoutputstream.h>
+#include <giomm/outputstream.h>
 #include <glibmm/bytes.h>
 #include <glibmm/error.h>
 #include <glibmm/main.h>
@@ -34,7 +36,6 @@ namespace copyclip::ui {
 namespace {
 
 constexpr const char* kMimeHtml = "text/html";
-constexpr gsize kStreamChunk = 4096;
 
 [[nodiscard]] Glib::RefPtr<Gdk::Clipboard> default_clipboard() {
     const Glib::RefPtr<Gdk::Display> display = Gdk::Display::get_default();
@@ -63,39 +64,6 @@ void write_state(const std::filesystem::path& path, const std::string& content) 
         spdlog::debug("could not persist clipboard state to {}: {}", path.string(),
                       error ? error.message() : "write failed");
     }
-}
-
-// Read a Gio input stream fully into a string (GTK does not NUL-terminate the
-// text/html payload, so the byte count is authoritative).
-[[nodiscard]] std::string drain_stream(const Glib::RefPtr<Gio::InputStream>& stream) {
-    std::string result;
-    while (true) {
-        Glib::RefPtr<Glib::Bytes> chunk;
-        try {
-            chunk = stream->read_bytes(kStreamChunk, {});
-        } catch (const Glib::Error& error) {
-            // A failure here (vs the EOF break below) may leave the HTML empty or
-            // truncated; surface it rather than swallowing it silently.
-            spdlog::warn("clipboard HTML stream read failed after {} bytes: {}", result.size(),
-                         error.what());
-            break;
-        }
-        if (!chunk) {
-            break;
-        }
-        gsize size = 0;
-        const auto* data = static_cast<const char*>(chunk->get_data(size));
-        if (size == 0) {
-            break;
-        }
-        result.append(data, size);
-    }
-    try {
-        stream->close();
-    } catch (const Glib::Error& error) {
-        spdlog::trace("clipboard stream close failed: {}", error.what());
-    }
-    return result;
 }
 
 // Copy a Glib::Bytes buffer into a byte vector without raw pointer arithmetic.
@@ -220,12 +188,16 @@ void GdkClipboardSource::read_plain_text() {
             if (text.empty() || text.raw() == last_text_) {
                 return;
             }
-            last_text_ = text.raw();
-            last_image_hash_.clear();
-            write_state(state_file_, text.raw());
+            remember_text(text.raw());
             deliver(core::ClipContent{.kind = core::ClipKind::Text, .text = text.raw()});
         },
         cancellable_);
+}
+
+void GdkClipboardSource::remember_text(const std::string& text) {
+    last_text_ = text;
+    last_image_hash_.clear();
+    write_state(state_file_, text);
 }
 
 void GdkClipboardSource::read_rich_text() {
@@ -252,7 +224,6 @@ void GdkClipboardSource::read_rich_text() {
                     if (cancellable->is_cancelled()) {
                         return;
                     }
-                    std::string html;
                     Glib::ustring chosen_mime;
                     Glib::RefPtr<Gio::InputStream> stream;
                     try {
@@ -264,20 +235,58 @@ void GdkClipboardSource::read_rich_text() {
                                      error.what());
                         stream.reset();
                     }
-                    if (stream) {
-                        html = drain_stream(stream);
+                    if (!stream) {
+                        remember_text(text);
+                        deliver(core::ClipContent{.kind = core::ClipKind::Text, .text = text});
+                        return;
                     }
-                    last_text_ = text;
-                    last_image_hash_.clear();
-                    write_state(state_file_, text);
-                    // Fall back to plain text if the HTML payload was unreadable.
-                    const core::ClipKind kind =
-                        html.empty() ? core::ClipKind::Text : core::ClipKind::RichText;
-                    deliver(core::ClipContent{.kind = kind, .text = text, .html = html});
+                    // Drain the HTML stream asynchronously (a synchronous read would
+                    // block the main loop the X11 transfer depends on), then deliver —
+                    // falling back to plain text if the payload turns out empty.
+                    drain_stream_async(stream, [this, cancellable, text](std::string html) {
+                        if (cancellable->is_cancelled()) {
+                            return;
+                        }
+                        remember_text(text);
+                        const core::ClipKind kind =
+                            html.empty() ? core::ClipKind::Text : core::ClipKind::RichText;
+                        deliver(
+                            core::ClipContent{.kind = kind, .text = text, .html = std::move(html)});
+                    });
                 },
                 cancellable_);
         },
         cancellable_);
+}
+
+void GdkClipboardSource::drain_stream_async(const Glib::RefPtr<Gio::InputStream>& stream,
+                                            std::function<void(std::string)> done) {
+    // Splice the stream into an in-memory buffer asynchronously: the GLib main loop
+    // keeps running (driving the X11 selection / INCR transfer) instead of blocking
+    // on a synchronous read, which would deadlock the UI. CLOSE_SOURCE closes the
+    // clipboard stream when done; the sink stays alive via the captured RefPtr until
+    // its bytes are read.
+    const Glib::RefPtr<Gio::MemoryOutputStream> sink = Gio::MemoryOutputStream::create();
+    const Glib::RefPtr<Gio::Cancellable> cancellable = cancellable_;
+    sink->splice_async(
+        stream,
+        [sink, cancellable, done = std::move(done)](Glib::RefPtr<Gio::AsyncResult>& result) {
+            if (cancellable->is_cancelled()) {
+                return;
+            }
+            std::string html;
+            try {
+                if (sink->splice_finish(result) > 0) {
+                    html.assign(static_cast<const char*>(sink->get_data()), sink->get_data_size());
+                }
+            } catch (const Glib::Error& error) {
+                // A failed/partial transfer just yields no HTML; the caller falls back
+                // to plain text. Leave a breadcrumb.
+                spdlog::warn("clipboard HTML stream read failed: {}", error.what());
+            }
+            done(std::move(html));
+        },
+        cancellable_, Gio::OutputStream::SpliceFlags::CLOSE_SOURCE);
 }
 
 void GdkClipboardSource::read_image() {
@@ -324,6 +333,9 @@ void GdkClipboardSource::read_image() {
 }
 
 void GdkClipboardSource::deliver(const core::ClipContent& content) {
+    spdlog::debug("captured clipboard: kind={} text_len={} html_len={} image={}x{} ({} bytes)",
+                  core::to_string(content.kind), content.text.size(), content.html.size(),
+                  content.image_width, content.image_height, content.image.size());
     try {
         if (on_change_) {
             on_change_(content);
