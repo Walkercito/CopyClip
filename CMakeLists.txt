@@ -66,6 +66,11 @@ endif()
 # src/CMakeLists.txt adds one subdirectory per layer as each comes to exist.
 add_subdirectory(src)
 
+# --- Packaging ----------------------------------------------------------------
+# Install rules + CPack config (.deb/.rpm/.tar.gz). Added after src so the
+# copyclip-gtk target exists when packaging installs it.
+add_subdirectory(packaging)
+
 # --- Tests --------------------------------------------------------------------
 # GoogleTest + CTest. Enabled unconditionally: the quality gate runs ctest on
 # every preset. tests/ provides a copyclip_add_test() helper and one target per
