@@ -115,6 +115,16 @@ TEST(HistoryServiceTest, PinnedSortFirst) {
     EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"a", "b"}));
 }
 
+TEST(HistoryServiceTest, ReaddingAPinnedClipKeepsItPinned) {
+    ServiceHarness harness;
+    harness.service.add("keep");
+    harness.service.toggle_pin("keep");
+    harness.service.add("keep"); // re-copy of an already-pinned clip
+    const auto entries = harness.service.entries();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_TRUE(entries.front().pinned);
+}
+
 TEST(HistoryServiceTest, CapEvictsOldestUnpinned) {
     ServiceHarness harness{2};
     for (const auto* text : {"a", "b", "c"}) {

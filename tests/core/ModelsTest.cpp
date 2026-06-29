@@ -54,6 +54,7 @@ TEST(ModelsTest, SettingsHaveReferenceDefaults) {
     EXPECT_EQ(settings.max_history_items, config::kDefaultMaxHistoryItems);
     EXPECT_EQ(settings.max_history_items, 200);
     EXPECT_TRUE(settings.auto_hide_on_copy);
+    EXPECT_FALSE(settings.auto_paste);
 }
 
 } // namespace

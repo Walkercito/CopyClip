@@ -36,6 +36,7 @@ void expect_settings_eq(const core::Settings& actual, const core::Settings& expe
     EXPECT_EQ(actual.first_run_completed, expected.first_run_completed);
     EXPECT_EQ(actual.max_history_items, expected.max_history_items);
     EXPECT_EQ(actual.auto_hide_on_copy, expected.auto_hide_on_copy);
+    EXPECT_EQ(actual.auto_paste, expected.auto_paste);
 }
 
 // Write `text` verbatim to `path`, seeding a corrupt or hand-crafted file.
@@ -73,7 +74,8 @@ TEST_F(JsonSettingsRepositoryTest, SaveThenLoadRoundtrip) {
                                .hotkey = core::HotkeyPreset::CtrlAltV,
                                .first_run_completed = true,
                                .max_history_items = config::kDefaultMaxHistoryItems,
-                               .auto_hide_on_copy = true};
+                               .auto_hide_on_copy = true,
+                               .auto_paste = true};
     repo().save(saved);
 
     const core::Settings loaded = storage::JsonSettingsRepository{settings_path()}.load();

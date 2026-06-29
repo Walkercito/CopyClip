@@ -53,6 +53,7 @@ struct Settings {
     bool first_run_completed = false;
     int max_history_items = config::kDefaultMaxHistoryItems;
     bool auto_hide_on_copy = true;
+    bool auto_paste = false;
 };
 
 } // namespace copyclip::core

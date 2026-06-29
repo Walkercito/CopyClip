@@ -93,9 +93,13 @@ bool HistoryService::add(const std::string& content) {
     }
     {
         const std::scoped_lock lock{mutex_};
+        // Preserve the pin across a re-copy: re-adding a pinned clip (e.g. clicking
+        // it, or the clipboard echoing our own write) must not silently unpin it.
+        const std::optional<ClipboardEntry> existing = find(content);
+        const bool pinned = existing.has_value() && existing->pinned;
         repository_.remove(content); // de-dup: drop any prior copy
         repository_.add(
-            ClipboardEntry{.content = content, .created_at = clock_.now(), .pinned = false});
+            ClipboardEntry{.content = content, .created_at = clock_.now(), .pinned = pinned});
         enforce_cap();
     }
     notify();
