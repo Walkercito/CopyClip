@@ -11,6 +11,7 @@
 #include "support/TempDir.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -125,6 +126,74 @@ TEST_F(SqliteHistoryRepositoryTest, CreatedAtRoundTripsWithSubSecondPrecision) {
     const std::vector<core::ClipboardEntry> entries = repository.all();
     ASSERT_EQ(entries.size(), 1U);
     EXPECT_EQ(entries[0].created_at, created_at);
+}
+
+// An image entry round-trips its kind + dimensions; the PNG bytes are NOT carried
+// by all() (lazy), but are fetched by content hash via image().
+TEST_F(SqliteHistoryRepositoryTest, ImageEntryRoundTripsLazily) {
+    const std::vector<std::byte> png{std::byte{0x89}, std::byte{0x50}, std::byte{0x4E},
+                                     std::byte{0x47}};
+    auto repository = repo();
+    repository.add(core::ClipboardEntry{.kind = core::ClipKind::Image,
+                                        .content = "imghash",
+                                        .image = png,
+                                        .image_width = 800,
+                                        .image_height = 600,
+                                        .created_at = date_utc(2026, 1, 1)});
+
+    const std::vector<core::ClipboardEntry> entries = repository.all();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries[0].kind, core::ClipKind::Image);
+    EXPECT_EQ(entries[0].image_width, 800);
+    EXPECT_EQ(entries[0].image_height, 600);
+    EXPECT_TRUE(entries[0].image.empty()); // lazy: not loaded by all()
+    EXPECT_EQ(repository.image("imghash"), png);
+    EXPECT_TRUE(repository.image("missing").empty());
+}
+
+// Removing an image entry drops its blob from the images table.
+TEST_F(SqliteHistoryRepositoryTest, RemovingImageEntryDropsBlob) {
+    const std::vector<std::byte> png{std::byte{0x01}, std::byte{0x02}};
+    auto repository = repo();
+    repository.add(core::ClipboardEntry{.kind = core::ClipKind::Image,
+                                        .content = "h1",
+                                        .image = png,
+                                        .created_at = date_utc(2026, 1, 1)});
+    repository.remove("h1");
+    EXPECT_TRUE(repository.image("h1").empty());
+}
+
+// A rich-text entry round-trips its kind and HTML markup.
+TEST_F(SqliteHistoryRepositoryTest, RichTextEntryRoundTrips) {
+    auto repository = repo();
+    repository.add(core::ClipboardEntry{.kind = core::ClipKind::RichText,
+                                        .content = "bold text",
+                                        .html = "<b>bold text</b>",
+                                        .created_at = date_utc(2026, 1, 1)});
+
+    const std::vector<core::ClipboardEntry> entries = repository.all();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries[0].kind, core::ClipKind::RichText);
+    EXPECT_EQ(entries[0].html, "<b>bold text</b>");
+}
+
+// A database created before the rich-content columns existed is migrated on open;
+// its legacy rows read back as plain text and keep their pin.
+TEST_F(SqliteHistoryRepositoryTest, MigratesPreRichContentSchema) {
+    {
+        SQLite::Database old{db_path(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
+        old.exec("CREATE TABLE entries (content TEXT PRIMARY KEY, created_at TEXT NOT NULL, "
+                 "pinned INTEGER NOT NULL DEFAULT 0)");
+        old.exec("INSERT INTO entries (content, created_at, pinned) "
+                 "VALUES ('legacy', '2026-01-01T00:00:00', 1)");
+    }
+    auto repository = repo(); // opens and migrates the schema
+
+    const std::vector<core::ClipboardEntry> entries = repository.all();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries[0].content, "legacy");
+    EXPECT_EQ(entries[0].kind, core::ClipKind::Text);
+    EXPECT_TRUE(entries[0].pinned);
 }
 
 } // namespace

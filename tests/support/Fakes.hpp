@@ -12,6 +12,7 @@
 #include "core/Models.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -110,9 +111,16 @@ public:
         std::vector<core::ClipboardEntry> result;
         result.reserve(entries_.size());
         for (const auto& [content, entry] : entries_) {
-            result.push_back(entry);
+            core::ClipboardEntry lazy = entry;
+            lazy.image.clear(); // image bytes are fetched via image(), as the real repo does
+            result.push_back(std::move(lazy));
         }
         return result;
+    }
+
+    [[nodiscard]] std::vector<std::byte> image(const std::string& hash) const override {
+        const auto it = entries_.find(hash);
+        return it == entries_.end() ? std::vector<std::byte>{} : it->second.image;
     }
 
 private:

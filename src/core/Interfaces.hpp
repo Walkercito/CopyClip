@@ -12,6 +12,7 @@
 #include "core/Models.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -84,6 +85,10 @@ public:
     virtual bool set_pinned(const std::string& content, bool pinned) = 0;
     virtual void clear_unpinned() = 0;
     [[nodiscard]] virtual std::vector<ClipboardEntry> all() const = 0;
+
+    // PNG bytes for an image entry, keyed by its content hash; empty when absent.
+    // Read lazily so all() never carries blobs.
+    [[nodiscard]] virtual std::vector<std::byte> image(const std::string& hash) const = 0;
 };
 
 class SettingsRepository {

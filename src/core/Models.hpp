@@ -27,6 +27,9 @@ namespace copyclip::core {
 // markup. `image` holds PNG bytes but is populated only when an entry is added or
 // written back — reads leave it empty so the history list stays light (image
 // bytes are fetched lazily by hash). `pinned` marks entries kept across eviction.
+// NOLINTBEGIN(readability-redundant-member-init): the value-init defaults let
+// callers use partial designated initializers without tripping GCC's
+// -Wmissing-field-initializers; the two diagnostics conflict on aggregates.
 struct ClipboardEntry {
     ClipKind kind = ClipKind::Text;
     std::string content{};
@@ -49,6 +52,7 @@ struct ClipContent {
     int image_width = 0;
     int image_height = 0;
 };
+// NOLINTEND(readability-redundant-member-init)
 
 // A hotkey: an ordered list of modifiers plus one key. The order drives
 // display_name(), e.g. {Ctrl, Alt} + V -> "Ctrl+Alt+V".

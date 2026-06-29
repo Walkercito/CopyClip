@@ -9,6 +9,7 @@
 
 #include <SQLiteCpp/Database.h>
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -27,6 +28,9 @@ public:
     [[nodiscard]] bool set_pinned(const std::string& content, bool pinned) override;
     void clear_unpinned() override;
     [[nodiscard]] std::vector<core::ClipboardEntry> all() const override;
+
+    // PNG bytes for an image entry, keyed by its content hash; empty if none.
+    [[nodiscard]] std::vector<std::byte> image(const std::string& hash) const override;
 
 private:
     // Creates the parent directory of `db_path` and returns it unchanged. Called

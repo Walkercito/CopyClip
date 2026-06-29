@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -18,30 +19,57 @@ namespace copyclip::storage {
 
 namespace {
 
-// Named so no bare SQL literal appears in the logic; mirrors the reference's
-// _SCHEMA and statements. `content` is the primary key, so INSERT OR REPLACE
-// upserts by content; pinned is stored as 0/1.
+// Named so no bare SQL literal appears in the logic. `content` is the primary
+// key (the plain text, or the image content hash), so INSERT OR REPLACE upserts
+// by content; pinned is stored as 0/1; kind is stored as its enum string. Image
+// bytes live in a separate `images` table keyed by the same content hash, read
+// lazily so the history list query never carries blobs.
 constexpr const char* kSchema = "CREATE TABLE IF NOT EXISTS entries ("
-                                "content    TEXT PRIMARY KEY, "
-                                "created_at TEXT NOT NULL, "
-                                "pinned     INTEGER NOT NULL DEFAULT 0)";
+                                "content      TEXT PRIMARY KEY, "
+                                "kind         TEXT NOT NULL DEFAULT 'text', "
+                                "html         TEXT NOT NULL DEFAULT '', "
+                                "image_width  INTEGER NOT NULL DEFAULT 0, "
+                                "image_height INTEGER NOT NULL DEFAULT 0, "
+                                "created_at   TEXT NOT NULL, "
+                                "pinned       INTEGER NOT NULL DEFAULT 0)";
+constexpr const char* kSchemaImages =
+    "CREATE TABLE IF NOT EXISTS images (hash TEXT PRIMARY KEY, png BLOB NOT NULL)";
 
 constexpr const char* kInsertOrReplace =
-    "INSERT OR REPLACE INTO entries (content, created_at, pinned) VALUES (?, ?, ?)";
+    "INSERT OR REPLACE INTO entries "
+    "(content, kind, html, image_width, image_height, created_at, pinned) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?)";
+constexpr const char* kInsertImage = "INSERT OR REPLACE INTO images (hash, png) VALUES (?, ?)";
+constexpr const char* kSelectImage = "SELECT png FROM images WHERE hash = ?";
 constexpr const char* kDeleteByContent = "DELETE FROM entries WHERE content = ?";
+constexpr const char* kDeleteImageByHash = "DELETE FROM images WHERE hash = ?";
 constexpr const char* kUpdatePinned = "UPDATE entries SET pinned = ? WHERE content = ?";
 constexpr const char* kDeleteUnpinned = "DELETE FROM entries WHERE pinned = 0";
-constexpr const char* kSelectAll = "SELECT content, created_at, pinned FROM entries";
+// Run before kDeleteUnpinned: it still needs the rows it references.
+constexpr const char* kDeleteUnpinnedImages =
+    "DELETE FROM images WHERE hash IN (SELECT content FROM entries WHERE pinned = 0)";
+constexpr const char* kSelectAll =
+    "SELECT content, kind, html, image_width, image_height, created_at, pinned FROM entries";
 
 // Column ordinals for the kSelectAll projection, named to avoid bare indices.
 constexpr int kColContent = 0;
-constexpr int kColCreatedAt = 1;
-constexpr int kColPinned = 2;
+constexpr int kColKind = 1;
+constexpr int kColHtml = 2;
+constexpr int kColImageWidth = 3;
+constexpr int kColImageHeight = 4;
+constexpr int kColCreatedAt = 5;
+constexpr int kColPinned = 6;
+constexpr int kColImagePng = 0;      // kSelectImage projection
+constexpr int kPragmaNameColumn = 1; // PRAGMA table_info: column 1 is the name
 
 // Bind-parameter ordinals (1-based, as SQLite numbers them).
 constexpr int kParamFirst = 1;
 constexpr int kParamSecond = 2;
 constexpr int kParamThird = 3;
+constexpr int kParamFourth = 4;
+constexpr int kParamFifth = 5;
+constexpr int kParamSixth = 6;
+constexpr int kParamSeventh = 7;
 
 // Pinned is persisted as a SQLite INTEGER: 1 for pinned, 0 otherwise.
 constexpr int kPinnedTrue = 1;
@@ -160,6 +188,27 @@ parse_iso8601(std::string_view text) {
     return std::chrono::time_point_cast<std::chrono::system_clock::duration>(whole);
 }
 
+// Whether the `entries` table already has `column` — drives the ADD COLUMN
+// migration so a DB created before the rich-content columns existed is upgraded.
+[[nodiscard]] bool has_column(SQLite::Database& database, std::string_view column) {
+    SQLite::Statement statement{database, "PRAGMA table_info(entries)"};
+    while (statement.executeStep()) {
+        if (statement.getColumn(kPragmaNameColumn).getString() == column) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Add `column` to `entries` when missing. `column`/`declaration` are fixed
+// literals from the schema, never caller input, so the concatenation is safe.
+void add_column_if_missing(SQLite::Database& database, const char* column,
+                           const char* declaration) {
+    if (!has_column(database, column)) {
+        database.exec(std::string{"ALTER TABLE entries ADD COLUMN "} + column + " " + declaration);
+    }
+}
+
 } // namespace
 
 std::filesystem::path SqliteHistoryRepository::ensure_parent(const std::filesystem::path& db_path) {
@@ -173,20 +222,42 @@ std::filesystem::path SqliteHistoryRepository::ensure_parent(const std::filesyst
 SqliteHistoryRepository::SqliteHistoryRepository(const std::filesystem::path& db_path)
     : database_{ensure_parent(db_path), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE} {
     database_.exec(kSchema);
+    database_.exec(kSchemaImages);
+    // Upgrade a DB created before rich-text/image support added these columns.
+    add_column_if_missing(database_, "kind", "TEXT NOT NULL DEFAULT 'text'");
+    add_column_if_missing(database_, "html", "TEXT NOT NULL DEFAULT ''");
+    add_column_if_missing(database_, "image_width", "INTEGER NOT NULL DEFAULT 0");
+    add_column_if_missing(database_, "image_height", "INTEGER NOT NULL DEFAULT 0");
 }
 
 void SqliteHistoryRepository::add(const core::ClipboardEntry& entry) {
     SQLite::Statement statement{database_, kInsertOrReplace};
     statement.bind(kParamFirst, entry.content);
-    statement.bind(kParamSecond, format_iso8601(entry.created_at));
-    statement.bind(kParamThird, entry.pinned ? kPinnedTrue : kPinnedFalse);
+    statement.bind(kParamSecond, std::string{core::to_string(entry.kind)});
+    statement.bind(kParamThird, entry.html);
+    statement.bind(kParamFourth, entry.image_width);
+    statement.bind(kParamFifth, entry.image_height);
+    statement.bind(kParamSixth, format_iso8601(entry.created_at));
+    statement.bind(kParamSeventh, entry.pinned ? kPinnedTrue : kPinnedFalse);
     statement.exec();
+
+    if (entry.kind == core::ClipKind::Image && !entry.image.empty()) {
+        SQLite::Statement image_statement{database_, kInsertImage};
+        image_statement.bind(kParamFirst, entry.content);
+        image_statement.bind(kParamSecond, entry.image.data(),
+                             static_cast<int>(entry.image.size()));
+        image_statement.exec();
+    }
 }
 
 void SqliteHistoryRepository::remove(const std::string& content) {
     SQLite::Statement statement{database_, kDeleteByContent};
     statement.bind(kParamFirst, content);
     statement.exec();
+    // Drop any image blob keyed by this content (a no-op for text entries).
+    SQLite::Statement image_statement{database_, kDeleteImageByHash};
+    image_statement.bind(kParamFirst, content);
+    image_statement.exec();
 }
 
 bool SqliteHistoryRepository::set_pinned(const std::string& content, bool pinned) {
@@ -197,6 +268,7 @@ bool SqliteHistoryRepository::set_pinned(const std::string& content, bool pinned
 }
 
 void SqliteHistoryRepository::clear_unpinned() {
+    database_.exec(kDeleteUnpinnedImages); // before the entries it references are gone
     SQLite::Statement statement{database_, kDeleteUnpinned};
     statement.exec();
 }
@@ -212,12 +284,39 @@ std::vector<core::ClipboardEntry> SqliteHistoryRepository::all() const {
             throw std::runtime_error{"SqliteHistoryRepository: malformed created_at timestamp '" +
                                      created_at_text + "'"};
         }
+        const std::string kind_text = statement.getColumn(kColKind).getString();
+        const std::optional<core::ClipKind> kind = core::clip_kind_from_string(kind_text);
+        if (!kind) {
+            throw std::runtime_error{"SqliteHistoryRepository: unknown clip kind '" + kind_text +
+                                     "'"};
+        }
+        // Image bytes stay lazy: left empty here, fetched on demand via image().
         entries.push_back(core::ClipboardEntry{
+            .kind = *kind,
             .content = statement.getColumn(kColContent).getString(),
+            .html = statement.getColumn(kColHtml).getString(),
+            .image_width = statement.getColumn(kColImageWidth).getInt(),
+            .image_height = statement.getColumn(kColImageHeight).getInt(),
             .created_at = *created_at,
             .pinned = statement.getColumn(kColPinned).getInt() != kPinnedFalse});
     }
     return entries;
+}
+
+std::vector<std::byte> SqliteHistoryRepository::image(const std::string& hash) const {
+    SQLite::Statement statement{database_, kSelectImage};
+    statement.bind(kParamFirst, hash);
+    if (!statement.executeStep()) {
+        return {};
+    }
+    const SQLite::Column column = statement.getColumn(kColImagePng);
+    const int size = column.getBytes();
+    if (size <= 0) {
+        return {};
+    }
+    const auto* bytes = static_cast<const std::byte*>(column.getBlob());
+    const std::span<const std::byte> view{bytes, static_cast<std::size_t>(size)};
+    return std::vector<std::byte>{view.begin(), view.end()};
 }
 
 } // namespace copyclip::storage
