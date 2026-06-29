@@ -24,12 +24,12 @@ AUTOSTART_FILE="${AUTOSTART_DIR}/${APP_ID}.desktop"
 # --- presentation -------------------------------------------------------------
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; GRN=$'\033[32m'
-  YLW=$'\033[33m'; BLU=$'\033[34m'; CYN=$'\033[36m'; NC=$'\033[0m'
+  YLW=$'\033[33m'; BLU=$'\033[34m'; CYN=$'\033[36m'; MAG=$'\033[35m'; WHT=$'\033[97m'; NC=$'\033[0m'
 else
-  BOLD=""; DIM=""; RED=""; GRN=""; YLW=""; BLU=""; CYN=""; NC=""
+  BOLD=""; DIM=""; RED=""; GRN=""; YLW=""; BLU=""; CYN=""; MAG=""; WHT=""; NC=""
 fi
 
-clear_screen() { [ -t 1 ] && printf '\033[2J\033[3J\033[H'; }
+clear_screen() { if [ -t 1 ]; then printf '\033[2J\033[3J\033[H'; fi; }
 
 headline() {
   printf '\n'
@@ -147,7 +147,7 @@ ensure_sudo() {
 # --- installed-state detection ------------------------------------------------
 detect_installed() {
   INSTALLED_VIA=""; INSTALLED_VERSION=""
-  if need dpkg && dpkg -s "$APP" >/dev/null 2>&1; then
+  if need dpkg && [ "$(dpkg-query -W -f='${db:Status-Status}' "$APP" 2>/dev/null)" = installed ]; then
     INSTALLED_VIA=deb
     INSTALLED_VERSION="$(dpkg-query -W -f='${Version}' "$APP" 2>/dev/null || true)"
   elif need rpm && rpm -q "$APP" >/dev/null 2>&1; then
@@ -283,8 +283,24 @@ install_from_source() {
   INSTALLED_BIN="/usr/local/bin/${APP}"
 }
 
+# True when $1 is an older version than $2 (i.e. an update is available).
+version_lt() {
+  [ "$1" != "$2" ] &&
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V 2>/dev/null | head -1)" = "$1" ]
+}
+
+# Color each character of $1 across a rainbow palette (bold).
+rainbow() {
+  local s="$1" out="" i
+  local palette=("$RED" "$YLW" "$GRN" "$CYN" "$BLU" "$MAG")
+  for ((i = 0; i < ${#s}; i++)); do
+    out+="${palette[i % 6]}${s:i:1}"
+  done
+  printf '%s%s%s' "$BOLD" "$out" "$NC"
+}
+
 do_install() {
-  fetch_release
+  [ -n "${RELEASE_JSON:-}" ] || fetch_release
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
   section "System"
@@ -316,8 +332,24 @@ do_install() {
 
   section "Done"
   tick "CopyClip ${RELEASE_TAG} is installed"
-  note "Find it in your applications menu, or run ${BOLD}${APP}${NC}"
-  printf '\n'
+  note "Find it in your applications menu, or launch it from a terminal:"
+  printf '       %s$%s %s%s%s%s\n\n' "$DIM" "$NC" "$BOLD" "$WHT" "$APP" "$NC"
+}
+
+do_update() {
+  fetch_release
+  local latest="${RELEASE_TAG#v}"
+  if [ -n "$INSTALLED_VERSION" ]; then
+    if ! version_lt "$INSTALLED_VERSION" "$latest"; then
+      section "Already up to date"
+      tick "You have the latest version (v${INSTALLED_VERSION})."
+      printf '\n'
+      exit 0
+    fi
+    printf '\n   %s available — %sv%s%s  %s(you have v%s)%s\n' \
+      "$(rainbow Update)" "$BOLD" "$latest" "$NC" "$DIM" "$INSTALLED_VERSION" "$NC"
+  fi
+  do_install
 }
 
 do_uninstall() {
@@ -341,7 +373,7 @@ do_uninstall() {
   case "$INSTALLED_VIA" in
     deb)
       ensure_sudo
-      run_step "Uninstalling with apt" $SUDO apt-get remove -y "$APP" || die "Removal failed."
+      run_step "Uninstalling with apt" $SUDO apt-get purge -y "$APP" || die "Removal failed."
       ;;
     rpm)
       ensure_sudo
@@ -384,18 +416,22 @@ main() {
   headline
 
   case "$action" in
-    install) do_install ;;
+    install)
+      detect_installed
+      if [ -n "$INSTALLED_VIA" ]; then do_update; else do_install; fi
+      ;;
     uninstall) do_uninstall ;;
     "")
       detect_installed
       if [ -n "$INSTALLED_VIA" ]; then
         section "CopyClip is already installed${INSTALLED_VERSION:+ (v${INSTALLED_VERSION})}"
-        printf '   %s[U]%spdate, %s[r]%semove, or %s[c]%sancel? ' \
-          "$BOLD" "$NC" "$BOLD" "$NC" "$BOLD" "$NC"
+        printf '   %s[%sU%s]%spdate, %s[%sR%s]%semove, or %s[%sC%s]%sancel? ' \
+          "$WHT" "$GRN" "$WHT" "$NC" "$WHT" "$RED" "$WHT" "$NC" "$WHT" "$YLW" "$WHT" "$NC"
         local ans=""
-        read -r ans </dev/tty 2>/dev/null || ans=""
+        read -rsn1 ans </dev/tty 2>/dev/null || ans=""
+        printf '%s\n' "$ans"
         case "$ans" in
-          "" | u | U) do_install ;;
+          "" | u | U) do_update ;;
           r | R) do_uninstall ;;
           *) note "Cancelled."; printf '\n'; exit 0 ;;
         esac
