@@ -1,0 +1,93 @@
+name: Release
+
+# Build distributable packages for each supported platform and attach them to the
+# GitHub Release for a version tag (vX.Y.Z). The workflow_dispatch path runs the
+# same build but uploads the packages as workflow artifacts instead of a release,
+# so the pipeline can be validated without cutting a real release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Install packaging tools
+        run: sudo apt-get install -y rpm file desktop-file-utils
+
+      # Built-in env vars (not ${{ }} interpolation) keep a crafted tag name out of
+      # the shell; the version is sanitized to package-safe characters as well.
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            raw="${GITHUB_REF_NAME#v}"
+          else
+            raw="0.0.0"
+          fi
+          version="$(printf '%s' "$raw" | tr -cd '0-9A-Za-z.~+_-')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate desktop entry
+        run: desktop-file-validate packaging/dev.walkercito.CopyClip.desktop
+
+      - name: Configure & build (release)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          cmake --preset release -DCOPYCLIP_VERSION="$VERSION"
+          cmake --build --preset release --target copyclip-gtk
+
+      - name: Package .deb / .rpm / .tar.gz
+        working-directory: build/release
+        run: cpack -G "DEB;RPM;TGZ"
+
+      - name: Build AppImage
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: ./scripts/appimage.sh build/release "$VERSION" "$ARCH"
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp build/release/*.deb build/release/*.rpm build/release/*.tar.gz \
+             build/release/*.AppImage dist/
+          ls -lh dist
+
+      - name: Attach to GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+
+      - name: Upload artifacts (validation runs)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: copyclip-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
