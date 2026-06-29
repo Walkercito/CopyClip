@@ -15,17 +15,39 @@
 #include "core/detail/AsciiCase.hpp"
 
 #include <chrono>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace copyclip::core {
 
-// A captured clipboard item. `pinned` marks entries kept across eviction.
+// A captured clipboard item. `content` is the dedup key: the plain text for Text
+// and RichText, or the image's content hash for Image. `html` carries RichText
+// markup. `image` holds PNG bytes but is populated only when an entry is added or
+// written back — reads leave it empty so the history list stays light (image
+// bytes are fetched lazily by hash). `pinned` marks entries kept across eviction.
 struct ClipboardEntry {
-    std::string content;
-    std::chrono::system_clock::time_point created_at;
+    ClipKind kind = ClipKind::Text;
+    std::string content{};
+    std::string html{};
+    std::vector<std::byte> image{};
+    int image_width = 0;
+    int image_height = 0;
+    std::chrono::system_clock::time_point created_at{};
     bool pinned = false;
+};
+
+// Transient clipboard content as read from or written to the clipboard, before
+// it becomes a stored ClipboardEntry. `text` is the plain text (Text/RichText),
+// `html` the RichText markup, `image` the PNG bytes (Image).
+struct ClipContent {
+    ClipKind kind = ClipKind::Text;
+    std::string text{};
+    std::string html{};
+    std::vector<std::byte> image{};
+    int image_width = 0;
+    int image_height = 0;
 };
 
 // A hotkey: an ordered list of modifiers plus one key. The order drives

@@ -30,6 +30,9 @@ enum class Theme : std::uint8_t { Dark, Light, System };
 
 enum class HotkeyPreset : std::uint8_t { SuperV, CtrlAltV, SuperC, CtrlShiftV };
 
+// The kind of content a clipboard entry holds.
+enum class ClipKind : std::uint8_t { Text, RichText, Image };
+
 namespace detail {
 
 // One {enumerator, value} pair. `text` views a string literal (static storage),
@@ -99,6 +102,12 @@ inline constexpr std::array<EnumEntry<HotkeyPreset>, 4> kHotkeyPresetTable{{
     {HotkeyPreset::CtrlShiftV, "ctrl_shift_v"},
 }};
 
+inline constexpr std::array<EnumEntry<ClipKind>, 3> kClipKindTable{{
+    {ClipKind::Text, "text"},
+    {ClipKind::RichText, "richtext"},
+    {ClipKind::Image, "image"},
+}};
+
 } // namespace detail
 
 [[nodiscard]] constexpr std::string_view to_string(SessionType value) {
@@ -140,6 +149,14 @@ inline constexpr std::array<EnumEntry<HotkeyPreset>, 4> kHotkeyPresetTable{{
 [[nodiscard]] constexpr std::optional<HotkeyPreset>
 hotkey_preset_from_string(std::string_view text) {
     return detail::from_string_impl(text, detail::kHotkeyPresetTable);
+}
+
+[[nodiscard]] constexpr std::string_view to_string(ClipKind value) {
+    return detail::to_string_impl(value, detail::kClipKindTable);
+}
+
+[[nodiscard]] constexpr std::optional<ClipKind> clip_kind_from_string(std::string_view text) {
+    return detail::from_string_impl(text, detail::kClipKindTable);
 }
 
 } // namespace copyclip::core
