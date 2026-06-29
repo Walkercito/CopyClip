@@ -117,10 +117,17 @@ bool HistoryService::add(const ClipContent& content) {
         // Preserve the pin across a re-copy: re-adding a pinned clip (e.g. clicking
         // it, or the clipboard echoing our own write) must not silently unpin it.
         const std::optional<ClipboardEntry> existing = find(entry.content);
+        // Collapse a rapid duplicate — a re-copy of the current item, or a backend
+        // that signals one clipboard change twice — into a no-op while that content
+        // is still the last recorded and still present (no churn, no notification).
+        if (entry.content == last_added_ && existing.has_value()) {
+            return false;
+        }
         entry.pinned = existing.has_value() && existing->pinned;
         entry.created_at = clock_.now();
         repository_.remove(entry.content); // de-dup: drop any prior copy
         repository_.add(entry);
+        last_added_ = entry.content;
         enforce_cap();
     }
     notify();

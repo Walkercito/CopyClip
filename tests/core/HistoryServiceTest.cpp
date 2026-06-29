@@ -125,6 +125,25 @@ TEST(HistoryServiceTest, ReaddingAPinnedClipKeepsItPinned) {
     EXPECT_TRUE(entries.front().pinned);
 }
 
+TEST(HistoryServiceTest, SkipsAdjacentDuplicateWithoutNotifying) {
+    ServiceHarness harness;
+    std::vector<int> calls;
+    const auto sub = harness.service.subscribe([&calls] { calls.push_back(1); });
+    EXPECT_TRUE(harness.service.add("dup"));  // first copy is recorded
+    EXPECT_FALSE(harness.service.add("dup")); // adjacent duplicate collapses to a no-op
+    EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"dup"}));
+    EXPECT_EQ(calls.size(), 1U); // only the first add notified subscribers
+}
+
+TEST(HistoryServiceTest, ReAddsDuplicateAfterRemoval) {
+    ServiceHarness harness;
+    harness.service.add("x");
+    harness.service.remove("x");
+    // No longer present, so the same content is recorded again rather than skipped.
+    EXPECT_TRUE(harness.service.add("x"));
+    EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"x"}));
+}
+
 TEST(HistoryServiceTest, CapEvictsOldestUnpinned) {
     ServiceHarness harness{2};
     for (const auto* text : {"a", "b", "c"}) {

@@ -99,6 +99,11 @@ private:
     HistoryRepository& repository_;
     Clock& clock_;
     int max_items_;
+    // The last content recorded, to collapse a rapid duplicate add (a re-copy of
+    // the current item, or a clipboard backend that signals one change twice) into
+    // a no-op — mirrors the reference's last_added dedup. Cleared implicitly: a
+    // duplicate is only skipped while that content is still present.
+    std::string last_added_;
     mutable std::mutex mutex_;
     std::map<std::size_t, std::function<void()>> subscribers_;
     std::size_t next_subscriber_id_ = 0;
