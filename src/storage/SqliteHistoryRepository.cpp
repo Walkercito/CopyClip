@@ -36,6 +36,13 @@ constexpr const char* kSchema = "CREATE TABLE IF NOT EXISTS entries ("
 constexpr const char* kSchemaImages =
     "CREATE TABLE IF NOT EXISTS images (hash TEXT PRIMARY KEY, png BLOB NOT NULL)";
 
+// A second process can touch the same DB (e.g. the global-shortcut launch running
+// alongside a COPYCLIP_STANDALONE dev instance). WAL allows a reader and a writer
+// to coexist, and the busy timeout makes a writer wait briefly for the lock rather
+// than failing immediately with "database is locked".
+constexpr int kBusyTimeoutMs = 3000;
+constexpr const char* kPragmaWal = "PRAGMA journal_mode=WAL";
+
 constexpr const char* kInsertOrReplace =
     "INSERT OR REPLACE INTO entries "
     "(content, kind, html, image_width, image_height, created_at, pinned) "
@@ -222,6 +229,8 @@ std::filesystem::path SqliteHistoryRepository::ensure_parent(const std::filesyst
 
 SqliteHistoryRepository::SqliteHistoryRepository(const std::filesystem::path& db_path)
     : database_{ensure_parent(db_path), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE} {
+    database_.exec(kPragmaWal);
+    database_.setBusyTimeout(kBusyTimeoutMs);
     database_.exec(kSchema);
     database_.exec(kSchemaImages);
     // Upgrade a DB created before rich-text/image support added these columns.
