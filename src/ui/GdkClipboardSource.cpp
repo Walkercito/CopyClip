@@ -1,25 +1,40 @@
 #include "ui/GdkClipboardSource.hpp"
 
+#include "core/Hash.hpp"
+
+#include <gdkmm/contentformats.h>
+#include <gdkmm/contentprovider.h>
 #include <gdkmm/display.h>
+#include <gdkmm/texture.h>
 
 #include <giomm/asyncresult.h>
+#include <giomm/inputstream.h>
+#include <glibmm/bytes.h>
 #include <glibmm/error.h>
+#include <glibmm/main.h>
 #include <glibmm/ustring.h>
+#include <glibmm/value.h>
 
 #include <spdlog/spdlog.h>
 
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace copyclip::ui {
 
 namespace {
+
+constexpr const char* kMimeHtml = "text/html";
+constexpr gsize kStreamChunk = 4096;
 
 [[nodiscard]] Glib::RefPtr<Gdk::Clipboard> default_clipboard() {
     const Glib::RefPtr<Gdk::Display> display = Gdk::Display::get_default();
@@ -50,6 +65,43 @@ void write_state(const std::filesystem::path& path, const std::string& content) 
     }
 }
 
+// Read a Gio input stream fully into a string (GTK does not NUL-terminate the
+// text/html payload, so the byte count is authoritative).
+[[nodiscard]] std::string drain_stream(const Glib::RefPtr<Gio::InputStream>& stream) {
+    std::string result;
+    while (true) {
+        Glib::RefPtr<Glib::Bytes> chunk;
+        try {
+            chunk = stream->read_bytes(kStreamChunk, {});
+        } catch (const Glib::Error&) {
+            break;
+        }
+        if (!chunk) {
+            break;
+        }
+        gsize size = 0;
+        const auto* data = static_cast<const char*>(chunk->get_data(size));
+        if (size == 0) {
+            break;
+        }
+        result.append(data, size);
+    }
+    try {
+        stream->close();
+    } catch (const Glib::Error& error) {
+        spdlog::trace("clipboard stream close failed: {}", error.what());
+    }
+    return result;
+}
+
+// Copy a Glib::Bytes buffer into a byte vector without raw pointer arithmetic.
+[[nodiscard]] std::vector<std::byte> to_bytes(const Glib::RefPtr<const Glib::Bytes>& bytes) {
+    gsize size = 0;
+    const auto* data = static_cast<const std::byte*>(bytes->get_data(size));
+    const std::span<const std::byte> view{data, size};
+    return std::vector<std::byte>{view.begin(), view.end()};
+}
+
 } // namespace
 
 GdkClipboardSource::GdkClipboardSource(std::filesystem::path state_file)
@@ -62,7 +114,7 @@ GdkClipboardSource::~GdkClipboardSource() {
     changed_connection_.disconnect();
 }
 
-void GdkClipboardSource::start(std::function<void(const std::string&)> on_change) {
+void GdkClipboardSource::start(std::function<void(const core::ClipContent&)> on_change) {
     on_change_ = std::move(on_change);
     cancellable_ = Gio::Cancellable::create();
     // Seed from the remembered clipboard so the content already present at launch
@@ -87,17 +139,65 @@ std::optional<std::string> GdkClipboardSource::read() const {
     return last_text_;
 }
 
-void GdkClipboardSource::write(const std::string& text) {
-    clipboard_->set_text(text);
+void GdkClipboardSource::write(const core::ClipContent& content) {
+    switch (content.kind) {
+    case core::ClipKind::Image: {
+        try {
+            const Glib::RefPtr<Glib::Bytes> bytes =
+                Glib::Bytes::create(content.image.data(), content.image.size());
+            clipboard_->set_texture(Gdk::Texture::create_from_bytes(bytes));
+            last_image_hash_ = core::content_hash(content.image);
+            last_text_.reset();
+        } catch (const Glib::Error& error) {
+            spdlog::error("failed to write image to clipboard: {}", error.what());
+        }
+        break;
+    }
+    case core::ClipKind::RichText: {
+        Glib::Value<Glib::ustring> text_value;
+        text_value.init(Glib::Value<Glib::ustring>::value_type());
+        text_value.set(content.text);
+        const Glib::RefPtr<Glib::Bytes> html_bytes =
+            Glib::Bytes::create(content.html.data(), content.html.size());
+        // Offer HTML first (richer), then plain text as the fallback format.
+        const Glib::RefPtr<Gdk::ContentProvider> provider =
+            Gdk::ContentProvider::create(std::vector<Glib::RefPtr<Gdk::ContentProvider>>{
+                Gdk::ContentProvider::create(kMimeHtml, html_bytes),
+                Gdk::ContentProvider::create(text_value)});
+        clipboard_->set_content(provider);
+        last_text_ = content.text;
+        last_image_hash_.clear();
+        break;
+    }
+    case core::ClipKind::Text:
+        clipboard_->set_text(content.text);
+        last_text_ = content.text;
+        last_image_hash_.clear();
+        break;
+    }
 }
 
 void GdkClipboardSource::on_changed() {
+    const Glib::RefPtr<const Gdk::ContentFormats> formats = clipboard_->get_formats();
+    const bool has_image =
+        formats &&
+        (formats->contain_gtype(Gdk::Texture::get_base_type()) ||
+         formats->contain_mime_type("image/png") || formats->contain_mime_type("image/jpeg") ||
+         formats->contain_mime_type("image/bmp") || formats->contain_mime_type("image/tiff"));
+    const bool has_html = formats && formats->contain_mime_type(kMimeHtml);
+    if (has_image) {
+        read_image();
+    } else if (has_html) {
+        read_rich_text();
+    } else {
+        read_plain_text();
+    }
+}
+
+void GdkClipboardSource::read_plain_text() {
     const Glib::RefPtr<Gio::Cancellable> cancellable = cancellable_;
     clipboard_->read_text_async(
         [this, cancellable](Glib::RefPtr<Gio::AsyncResult>& result) {
-            // The source may be destroyed before this fires. The captured cancellable
-            // outlives `this`; once it is cancelled (in stop/destructor) we bail
-            // before dereferencing the dangling source.
             if (cancellable->is_cancelled()) {
                 return;
             }
@@ -105,30 +205,114 @@ void GdkClipboardSource::on_changed() {
             try {
                 text = clipboard_->read_text_finish(result);
             } catch (const Glib::Error& error) {
-                // Non-text content (an image, etc.) or a transient read error — skip.
-                spdlog::trace("clipboard read skipped: {}", error.what());
+                spdlog::trace("clipboard text read skipped: {}", error.what());
                 return;
             }
-            // React only to a genuine content change. GdkClipboard::changed also fires
-            // on ownership changes (focus/window events) without the text changing;
-            // without this guard, clearing the history and then moving the window would
-            // re-capture the unchanged clipboard.
+            // Skip ownership/focus changes that don't change the content.
             if (text.empty() || text.raw() == last_text_) {
                 return;
             }
             last_text_ = text.raw();
+            last_image_hash_.clear();
             write_state(state_file_, text.raw());
-            try {
-                if (on_change_) {
-                    on_change_(text.raw());
-                }
-            } catch (const std::exception& error) {
-                // The callback records to the history DB; a storage failure must not
-                // escape across the GLib C callback boundary.
-                spdlog::error("failed to record clipboard entry: {}", error.what());
-            }
+            deliver(core::ClipContent{.kind = core::ClipKind::Text, .text = text.raw()});
         },
         cancellable_);
+}
+
+void GdkClipboardSource::read_rich_text() {
+    const Glib::RefPtr<Gio::Cancellable> cancellable = cancellable_;
+    // Read the plain-text form first (the dedup key + display text), then the HTML.
+    clipboard_->read_text_async(
+        [this, cancellable](Glib::RefPtr<Gio::AsyncResult>& text_result) {
+            if (cancellable->is_cancelled()) {
+                return;
+            }
+            std::string text;
+            try {
+                text = clipboard_->read_text_finish(text_result).raw();
+            } catch (const Glib::Error&) {
+                return;
+            }
+            if (text.empty() || text == last_text_) {
+                return;
+            }
+            clipboard_->read_async(
+                {kMimeHtml}, Glib::PRIORITY_DEFAULT,
+                [this, cancellable, text](Glib::RefPtr<Gio::AsyncResult>& html_result) {
+                    if (cancellable->is_cancelled()) {
+                        return;
+                    }
+                    std::string html;
+                    Glib::ustring chosen_mime;
+                    Glib::RefPtr<Gio::InputStream> stream;
+                    try {
+                        stream = clipboard_->read_finish(html_result, chosen_mime);
+                    } catch (const Glib::Error&) {
+                        stream.reset();
+                    }
+                    if (stream) {
+                        html = drain_stream(stream);
+                    }
+                    last_text_ = text;
+                    last_image_hash_.clear();
+                    write_state(state_file_, text);
+                    // Fall back to plain text if the HTML payload was unreadable.
+                    const core::ClipKind kind =
+                        html.empty() ? core::ClipKind::Text : core::ClipKind::RichText;
+                    deliver(core::ClipContent{.kind = kind, .text = text, .html = html});
+                },
+                cancellable_);
+        },
+        cancellable_);
+}
+
+void GdkClipboardSource::read_image() {
+    const Glib::RefPtr<Gio::Cancellable> cancellable = cancellable_;
+    clipboard_->read_texture_async(
+        [this, cancellable](Glib::RefPtr<Gio::AsyncResult>& result) {
+            if (cancellable->is_cancelled()) {
+                return;
+            }
+            Glib::RefPtr<Gdk::Texture> texture;
+            try {
+                texture = clipboard_->read_texture_finish(result);
+            } catch (const Glib::Error& error) {
+                spdlog::trace("clipboard image read skipped: {}", error.what());
+                return;
+            }
+            if (!texture) {
+                return;
+            }
+            const Glib::RefPtr<Glib::Bytes> png = texture->save_to_png_bytes();
+            if (!png) {
+                return;
+            }
+            std::vector<std::byte> bytes = to_bytes(png);
+            const std::string hash = core::content_hash(bytes);
+            if (hash == last_image_hash_) {
+                return;
+            }
+            last_image_hash_ = hash;
+            last_text_.reset();
+            deliver(core::ClipContent{.kind = core::ClipKind::Image,
+                                      .image = std::move(bytes),
+                                      .image_width = texture->get_width(),
+                                      .image_height = texture->get_height()});
+        },
+        cancellable_);
+}
+
+void GdkClipboardSource::deliver(const core::ClipContent& content) {
+    try {
+        if (on_change_) {
+            on_change_(content);
+        }
+    } catch (const std::exception& error) {
+        // The callback records to the history DB; a storage failure must not escape
+        // across the GLib C callback boundary.
+        spdlog::error("failed to record clipboard entry: {}", error.what());
+    }
 }
 
 } // namespace copyclip::ui

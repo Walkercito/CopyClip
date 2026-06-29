@@ -49,7 +49,7 @@ TEST(InterfacesTest, ClockSeamDispatchesToFake) {
 TEST(InterfacesTest, ClipboardSourceSeamDispatchesToFake) {
     testing::FakeClipboardSource fake;
     core::ClipboardSource& seam = fake;
-    seam.write("hello");
+    seam.write(testing::text_clip("hello"));
     EXPECT_EQ(seam.read(), std::optional<std::string>{"hello"});
 }
 

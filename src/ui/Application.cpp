@@ -42,7 +42,8 @@ void Application::on_activate() {
         clipboard_ = std::make_unique<GdkClipboardSource>(clipboard_state_file_);
         window_ = std::make_unique<MainWindow>(application_->gobj(), history_.get(),
                                                settings_.get(), *clipboard_, paster_);
-        clipboard_->start([this](const std::string& text) { history_.get().add(text); });
+        clipboard_->start(
+            [this](const core::ClipContent& content) { history_.get().add(content); });
         application_->hold(); // keep capturing in the background after the window hides
         // On idle (so gsettings calls don't delay the window): onboard a new user,
         // otherwise refresh the binding only if the shortcut is still enabled.

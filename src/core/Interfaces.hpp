@@ -34,8 +34,9 @@ public:
     [[nodiscard]] virtual std::chrono::system_clock::time_point now() const = 0;
 };
 
-// The system clipboard: a watched, readable, writable text channel. start()
-// delivers external changes to on_change.
+// The system clipboard: a watched, readable, writable channel carrying text, rich
+// text, or images. start() delivers external changes to on_change as ClipContent;
+// write() puts a ClipContent back. read() exposes the last text for tests/seeding.
 class ClipboardSource {
 public:
     ClipboardSource() = default;
@@ -46,10 +47,10 @@ public:
     ClipboardSource(ClipboardSource&&) = delete;
     ClipboardSource& operator=(ClipboardSource&&) = delete;
 
-    virtual void start(std::function<void(const std::string&)> on_change) = 0;
+    virtual void start(std::function<void(const ClipContent&)> on_change) = 0;
     virtual void stop() = 0;
     [[nodiscard]] virtual std::optional<std::string> read() const = 0;
-    virtual void write(const std::string& text) = 0;
+    virtual void write(const ClipContent& content) = 0;
 };
 
 // A global hotkey listener. rebind() returns whether the new grab succeeded.

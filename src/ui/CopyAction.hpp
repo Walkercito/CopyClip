@@ -30,7 +30,7 @@ public:
     CopyAction& operator=(CopyAction&&) = delete;
 
     // Copy `content`; returns whether the caller should hide the window afterwards.
-    [[nodiscard]] bool run(const std::string& content);
+    [[nodiscard]] bool run(const core::ClipContent& content);
 
 private:
     std::reference_wrapper<core::ClipboardSource> clipboard_;

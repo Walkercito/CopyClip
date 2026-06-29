@@ -37,7 +37,7 @@ public:
     void copy_to_clipboard(const std::string& content);
 
 private:
-    void on_clipboard_change(const std::string& text);
+    void on_clipboard_change(const ClipContent& content);
     void on_hotkey();
 
     std::reference_wrapper<ClipboardSource> clipboard_;

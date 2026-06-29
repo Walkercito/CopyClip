@@ -20,7 +20,7 @@ CopyAction::~CopyAction() {
     paste_connection_.disconnect();
 }
 
-bool CopyAction::run(const std::string& content) {
+bool CopyAction::run(const core::ClipContent& content) {
     clipboard_.get().write(content);
     history_.get().add(content);
     const core::Settings& settings = settings_.get().settings();

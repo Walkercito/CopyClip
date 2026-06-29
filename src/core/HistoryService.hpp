@@ -33,9 +33,12 @@ class HistoryService {
 public:
     HistoryService(HistoryRepository& repository, Clock& clock, int max_items);
 
-    // Record `content` as the newest item. Blank input (empty or whitespace-only)
-    // is ignored and returns false; otherwise any prior copy is dropped, the item
-    // is re-added with a fresh timestamp, and capacity is enforced.
+    // Record a clip as the newest item. Blank text (or an empty image) is ignored
+    // and returns false; otherwise any prior copy of the same content is dropped,
+    // the item is re-added with a fresh timestamp (its pin preserved), and capacity
+    // is enforced. Image clips dedup on a content hash; the std::string overload is
+    // a convenience for plain text.
+    bool add(const ClipContent& content);
     bool add(const std::string& content);
 
     // Flip the pinned flag of `content` and return the NEW pin state. As in the
@@ -49,6 +52,9 @@ public:
 
     // Snapshot of the history, sorted pinned-first then most-recent-first.
     [[nodiscard]] std::vector<ClipboardEntry> entries() const;
+
+    // PNG bytes for an image entry by its content key; empty when absent.
+    [[nodiscard]] std::vector<std::byte> image(const std::string& content) const;
 
     // RAII handle for a subscription: drop it to stop receiving notifications. The
     // owning HistoryService must outlive it.

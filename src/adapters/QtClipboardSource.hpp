@@ -29,16 +29,16 @@ public:
     QtClipboardSource(QtClipboardSource&&) = delete;
     QtClipboardSource& operator=(QtClipboardSource&&) = delete;
 
-    void start(std::function<void(const std::string&)> on_change) override;
+    void start(std::function<void(const core::ClipContent&)> on_change) override;
     void stop() override;
     [[nodiscard]] std::optional<std::string> read() const override;
-    void write(const std::string& text) override;
+    void write(const core::ClipContent& content) override;
 
 private:
     void handle_change();
 
     QClipboard* clipboard_ = nullptr;
-    std::function<void(const std::string&)> on_change_;
+    std::function<void(const core::ClipContent&)> on_change_;
     QMetaObject::Connection connection_;
 };
 

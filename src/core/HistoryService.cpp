@@ -1,5 +1,6 @@
 #include "core/HistoryService.hpp"
 
+#include "core/Hash.hpp"
 #include "core/Models.hpp"
 
 #include <algorithm>
@@ -89,22 +90,46 @@ HistoryService::HistoryService(HistoryRepository& repository, Clock& clock, int 
     : repository_{repository}, clock_{clock}, max_items_{max_items} {}
 
 bool HistoryService::add(const std::string& content) {
-    if (is_blank(content)) {
-        return false;
+    return add(ClipContent{.kind = ClipKind::Text, .text = content});
+}
+
+bool HistoryService::add(const ClipContent& content) {
+    ClipboardEntry entry;
+    entry.kind = content.kind;
+    if (content.kind == ClipKind::Image) {
+        if (content.image.empty()) {
+            return false;
+        }
+        entry.content = content_hash(content.image); // dedup key = image fingerprint
+        entry.image = content.image;
+        entry.image_width = content.image_width;
+        entry.image_height = content.image_height;
+    } else {
+        if (is_blank(content.text)) {
+            return false;
+        }
+        entry.content = content.text;
+        entry.html = content.html; // empty for Text, markup for RichText
     }
+
     {
         const std::scoped_lock lock{mutex_};
         // Preserve the pin across a re-copy: re-adding a pinned clip (e.g. clicking
         // it, or the clipboard echoing our own write) must not silently unpin it.
-        const std::optional<ClipboardEntry> existing = find(content);
-        const bool pinned = existing.has_value() && existing->pinned;
-        repository_.remove(content); // de-dup: drop any prior copy
-        repository_.add(
-            ClipboardEntry{.content = content, .created_at = clock_.now(), .pinned = pinned});
+        const std::optional<ClipboardEntry> existing = find(entry.content);
+        entry.pinned = existing.has_value() && existing->pinned;
+        entry.created_at = clock_.now();
+        repository_.remove(entry.content); // de-dup: drop any prior copy
+        repository_.add(entry);
         enforce_cap();
     }
     notify();
     return true;
+}
+
+std::vector<std::byte> HistoryService::image(const std::string& content) const {
+    const std::scoped_lock lock{mutex_};
+    return repository_.image(content);
 }
 
 bool HistoryService::toggle_pin(const std::string& content) {

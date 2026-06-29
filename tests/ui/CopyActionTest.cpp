@@ -19,6 +19,7 @@ using copyclip::testing::FakeClipboardSource;
 using copyclip::testing::FakeClock;
 using copyclip::testing::InMemoryHistoryRepository;
 using copyclip::testing::InMemorySettingsRepository;
+using copyclip::testing::text_clip;
 
 // Records paste() calls without spawning any input tool.
 struct FakePaster final : public copyclip::ui::Paster {
@@ -47,7 +48,7 @@ struct CopyActionHarness {
 
 TEST(CopyActionTest, WritesClipboardAndRecordsHistory) {
     CopyActionHarness harness;
-    EXPECT_TRUE(harness.action.run("hello")); // default auto-hide -> hide
+    EXPECT_TRUE(harness.action.run(text_clip("hello"))); // default auto-hide -> hide
     EXPECT_EQ(harness.clipboard.text, "hello");
     EXPECT_EQ(harness.history.entries().size(), 1U);
 }
@@ -55,19 +56,19 @@ TEST(CopyActionTest, WritesClipboardAndRecordsHistory) {
 TEST(CopyActionTest, HidesWhenAutoHideOn) {
     CopyActionHarness harness;
     harness.set(true, false);
-    EXPECT_TRUE(harness.action.run("x"));
+    EXPECT_TRUE(harness.action.run(text_clip("x")));
 }
 
 TEST(CopyActionTest, DoesNotHideWhenBothOff) {
     CopyActionHarness harness;
     harness.set(false, false);
-    EXPECT_FALSE(harness.action.run("x"));
+    EXPECT_FALSE(harness.action.run(text_clip("x")));
 }
 
 TEST(CopyActionTest, HidesWhenAutoPasteEvenWithAutoHideOff) {
     CopyActionHarness harness;
     harness.set(false, true);
-    EXPECT_TRUE(harness.action.run("x"));
+    EXPECT_TRUE(harness.action.run(text_clip("x")));
 }
 
 } // namespace

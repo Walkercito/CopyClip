@@ -11,21 +11,23 @@
 namespace {
 
 using copyclip::adapters::QtClipboardSource;
+using copyclip::core::ClipContent;
+using copyclip::core::ClipKind;
 
 // Mirrors tests/adapters/test_qt_clipboard.py, run against the offscreen QPA
 // platform so it needs no real display.
 
 TEST(QtClipboardSourceTest, WriteThenReadRoundtrip) {
     QtClipboardSource source;
-    source.write("hello qt");
+    source.write(ClipContent{.kind = ClipKind::Text, .text = "hello qt"});
     EXPECT_EQ(source.read(), std::optional<std::string>{"hello qt"});
 }
 
 TEST(QtClipboardSourceTest, DataChangedInvokesCallback) {
     QtClipboardSource source;
     std::vector<std::string> seen;
-    source.start([&seen](const std::string& text) { seen.push_back(text); });
-    source.write("changed"); // setText emits dataChanged
+    source.start([&seen](const ClipContent& content) { seen.push_back(content.text); });
+    source.write(ClipContent{.kind = ClipKind::Text, .text = "changed"}); // emits dataChanged
     QCoreApplication::processEvents();
     EXPECT_FALSE(seen.empty());
     if (!seen.empty()) {

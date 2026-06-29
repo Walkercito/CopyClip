@@ -232,7 +232,7 @@ void MainWindow::apply_filter() {
 
 void MainWindow::copy(const std::string& content) {
     // CopyAction handles clipboard + history + auto-paste; the window just hides.
-    if (copy_action_.run(content)) {
+    if (copy_action_.run(core::ClipContent{.kind = core::ClipKind::Text, .text = content})) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
     }
 }

@@ -210,4 +210,42 @@ TEST(HistoryServiceTest, NotifiesSubscribersOutsideTheLock) {
     EXPECT_EQ(observed_sizes.front(), 1U);
 }
 
+// Image clips dedup on a content hash: re-copying the same image keeps one entry,
+// and its bytes round-trip through image().
+TEST(HistoryServiceTest, AddingImageDedupsByContentHash) {
+    ServiceHarness harness;
+    const std::vector<std::byte> png{std::byte{1}, std::byte{2}, std::byte{3}};
+    const copyclip::core::ClipContent clip{
+        .kind = copyclip::core::ClipKind::Image, .image = png, .image_width = 4, .image_height = 4};
+    harness.service.add(clip);
+    harness.service.add(clip); // re-copy of the same image
+
+    const auto entries = harness.service.entries();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries.front().kind, copyclip::core::ClipKind::Image);
+    EXPECT_EQ(entries.front().image_width, 4);
+    EXPECT_EQ(harness.service.image(entries.front().content), png);
+}
+
+// A rich-text clip keeps its kind and HTML.
+TEST(HistoryServiceTest, AddingRichTextKeepsHtml) {
+    ServiceHarness harness;
+    harness.service.add(copyclip::core::ClipContent{
+        .kind = copyclip::core::ClipKind::RichText, .text = "hi", .html = "<b>hi</b>"});
+
+    const auto entries = harness.service.entries();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries.front().kind, copyclip::core::ClipKind::RichText);
+    EXPECT_EQ(entries.front().content, "hi");
+    EXPECT_EQ(entries.front().html, "<b>hi</b>");
+}
+
+// An empty image is rejected, like blank text.
+TEST(HistoryServiceTest, AddingEmptyImageIsIgnored) {
+    ServiceHarness harness;
+    EXPECT_FALSE(
+        harness.service.add(copyclip::core::ClipContent{.kind = copyclip::core::ClipKind::Image}));
+    EXPECT_TRUE(harness.service.entries().empty());
+}
+
 } // namespace

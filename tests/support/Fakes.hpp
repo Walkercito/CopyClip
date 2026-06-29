@@ -22,6 +22,12 @@
 
 namespace copyclip::testing {
 
+// Build a plain-text ClipContent — convenience for tests exercising the clipboard
+// seam, which now carries kind-tagged content rather than a bare string.
+[[nodiscard]] inline core::ClipContent text_clip(std::string text) {
+    return core::ClipContent{.kind = core::ClipKind::Text, .text = std::move(text)};
+}
+
 // A clock pinned to a fixed moment that the test can advance() forward.
 struct FakeClock final : public core::Clock {
     explicit FakeClock(std::chrono::system_clock::time_point moment) : moment_{moment} {}
@@ -36,7 +42,7 @@ private:
 
 // A clipboard backed by an in-memory string; emit() simulates an external change.
 struct FakeClipboardSource final : public core::ClipboardSource {
-    void start(std::function<void(const std::string&)> callback) override {
+    void start(std::function<void(const core::ClipContent&)> callback) override {
         on_change = std::move(callback);
         started = true;
     }
@@ -45,18 +51,26 @@ struct FakeClipboardSource final : public core::ClipboardSource {
 
     [[nodiscard]] std::optional<std::string> read() const override { return text; }
 
-    void write(const std::string& new_text) override { text = new_text; }
+    void write(const core::ClipContent& content) override {
+        written = content;
+        text = content.text;
+    }
 
     // Update the contents and notify the registered listener, if any.
     void emit(const std::string& new_text) {
-        text = new_text;
+        emit(core::ClipContent{.kind = core::ClipKind::Text, .text = new_text});
+    }
+
+    void emit(const core::ClipContent& content) {
+        text = content.text;
         if (on_change) {
-            on_change(new_text);
+            on_change(content);
         }
     }
 
     std::optional<std::string> text;
-    std::function<void(const std::string&)> on_change;
+    core::ClipContent written; // the last write()
+    std::function<void(const core::ClipContent&)> on_change;
     bool started = false;
 };
 

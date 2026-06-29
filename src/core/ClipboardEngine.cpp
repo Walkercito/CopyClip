@@ -11,7 +11,7 @@ ClipboardEngine::ClipboardEngine(ClipboardSource& clipboard, HotkeyListener& hot
     : clipboard_{clipboard}, hotkey_{hotkey}, history_{history}, settings_{settings} {}
 
 void ClipboardEngine::start() {
-    clipboard_.get().start([this](const std::string& text) { on_clipboard_change(text); });
+    clipboard_.get().start([this](const ClipContent& content) { on_clipboard_change(content); });
     hotkey_.get().start([this] { on_hotkey(); });
     spdlog::info("engine started");
 }
@@ -35,12 +35,12 @@ void ClipboardEngine::on_show_requested(std::function<void()> callback) {
 }
 
 void ClipboardEngine::copy_to_clipboard(const std::string& content) {
-    clipboard_.get().write(content);
+    clipboard_.get().write(ClipContent{.kind = ClipKind::Text, .text = content});
     history_.get().add(content);
 }
 
-void ClipboardEngine::on_clipboard_change(const std::string& text) {
-    history_.get().add(text);
+void ClipboardEngine::on_clipboard_change(const ClipContent& content) {
+    history_.get().add(content);
 }
 
 void ClipboardEngine::on_hotkey() {
