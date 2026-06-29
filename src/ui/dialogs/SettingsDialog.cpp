@@ -62,8 +62,9 @@ void fill_combo(AdwComboRow* row, const std::vector<std::string>& options, unsig
 } // namespace
 
 SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& settings,
-                               ThemeChangedCallback on_theme_changed)
-    : settings_{settings}, on_theme_changed_{std::move(on_theme_changed)} {
+                               ThemeChangedCallback on_theme_changed, ClosedCallback on_closed)
+    : settings_{settings}, on_theme_changed_{std::move(on_theme_changed)},
+      on_closed_{std::move(on_closed)} {
     const core::Settings& current = settings.settings();
 
     // A plain AdwDialog (not AdwPreferencesDialog) so it presents as a bottom sheet
@@ -122,7 +123,12 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), GTK_WIDGET(page));
     adw_dialog_set_child(dialog, toolbar);
+    g_signal_connect(dialog, "closed", G_CALLBACK(&SettingsDialog::on_dialog_closed), this);
     adw_dialog_present(dialog, parent);
+}
+
+void SettingsDialog::on_dialog_closed(AdwDialog* /*dialog*/, gpointer self) {
+    static_cast<SettingsDialog*>(self)->on_closed_();
 }
 
 void SettingsDialog::on_theme_selected(GObject* row, GParamSpec* /*spec*/, gpointer self) {

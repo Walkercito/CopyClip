@@ -8,6 +8,7 @@
 #include "core/HistoryService.hpp"
 #include "core/SettingsService.hpp"
 #include "ui/GdkClipboardSource.hpp"
+#include "ui/KeystrokePaster.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/dialogs/FirstRunDialog.hpp"
 
@@ -40,6 +41,7 @@ private:
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::SettingsService> settings_;
     std::filesystem::path clipboard_state_file_;
+    KeystrokePaster paster_;
     Glib::RefPtr<Gtk::Application> application_;
     std::unique_ptr<GdkClipboardSource> clipboard_;
     std::unique_ptr<MainWindow> window_;

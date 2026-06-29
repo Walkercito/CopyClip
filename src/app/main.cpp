@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
         // history, and settings it references all outlive it.
         core::ClipboardEngine engine{*clipboard, *listener, history, settings};
         engine.on_show_requested([] { spdlog::info("show requested (UI pending)"); });
-        history.subscribe(
+        const auto history_subscription = history.subscribe(
             [&history] { spdlog::info("history now holds {} entries", history.entries().size()); });
 
         engine.start();

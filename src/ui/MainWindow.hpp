@@ -11,6 +11,7 @@
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
 #include "core/SettingsService.hpp"
+#include "ui/CopyAction.hpp"
 #include "ui/Paster.hpp"
 #include "ui/dialogs/SettingsDialog.hpp"
 
@@ -31,8 +32,8 @@ namespace copyclip::ui {
 class MainWindow {
 public:
     MainWindow(GtkApplication* application, core::HistoryService& history,
-               core::SettingsService& settings, core::ClipboardSource& clipboard);
-    ~MainWindow() = default;
+               core::SettingsService& settings, core::ClipboardSource& clipboard, Paster& paster);
+    ~MainWindow();
 
     MainWindow(const MainWindow&) = delete;
     MainWindow& operator=(const MainWindow&) = delete;
@@ -57,9 +58,8 @@ private:
     [[nodiscard]] bool matches(const std::string& content) const;
 
     std::reference_wrapper<core::HistoryService> history_;
-    std::reference_wrapper<core::ClipboardSource> clipboard_;
     std::reference_wrapper<core::SettingsService> settings_;
-    Paster paster_;
+    CopyAction copy_action_;
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
@@ -70,6 +70,7 @@ private:
     Gtk::Label* empty_title_ = nullptr;
     Gtk::Label* empty_description_ = nullptr;
     std::unique_ptr<SettingsDialog> settings_dialog_;
+    core::HistoryService::Subscription history_subscription_;
 };
 
 } // namespace copyclip::ui

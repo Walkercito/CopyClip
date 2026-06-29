@@ -1,4 +1,4 @@
-#include "ui/Paster.hpp"
+#include "ui/KeystrokePaster.hpp"
 
 #include <glibmm/error.h>
 #include <glibmm/miscutils.h>
@@ -40,9 +40,9 @@ bool try_run(const std::vector<std::string>& argv) {
 
 } // namespace
 
-Paster::Paster(core::SessionType session) : session_{session} {}
+KeystrokePaster::KeystrokePaster(core::SessionType session) : session_{session} {}
 
-void Paster::paste() const {
+void KeystrokePaster::paste() const {
     for (const std::vector<std::string>& argv : paste_commands(session_)) {
         if (try_run(argv)) {
             return;

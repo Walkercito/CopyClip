@@ -9,7 +9,7 @@
 
 #include "core/SettingsService.hpp"
 
-#include <gtk/gtk.h>
+#include <adwaita.h>
 
 #include <functional>
 
@@ -18,9 +18,10 @@ namespace copyclip::ui {
 class SettingsDialog {
 public:
     using ThemeChangedCallback = std::function<void()>;
+    using ClosedCallback = std::function<void()>;
 
     SettingsDialog(GtkWidget* parent, core::SettingsService& settings,
-                   ThemeChangedCallback on_theme_changed);
+                   ThemeChangedCallback on_theme_changed, ClosedCallback on_closed);
     ~SettingsDialog() = default;
 
     SettingsDialog(const SettingsDialog&) = delete;
@@ -34,6 +35,7 @@ private:
     static void on_shortcut_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_hide_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_paste_toggled(GObject* row, GParamSpec* spec, gpointer self);
+    static void on_dialog_closed(AdwDialog* dialog, gpointer self);
 
     void apply_theme(unsigned int index);
     void apply_hotkey(unsigned int index);
@@ -43,6 +45,7 @@ private:
 
     std::reference_wrapper<core::SettingsService> settings_;
     ThemeChangedCallback on_theme_changed_;
+    ClosedCallback on_closed_;
 };
 
 } // namespace copyclip::ui

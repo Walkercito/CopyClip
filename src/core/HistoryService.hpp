@@ -19,7 +19,9 @@
 #include "core/Interfaces.hpp"
 #include "core/Models.hpp"
 
+#include <cstddef>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -48,8 +50,26 @@ public:
     // Snapshot of the history, sorted pinned-first then most-recent-first.
     [[nodiscard]] std::vector<ClipboardEntry> entries() const;
 
+    // RAII handle for a subscription: drop it to stop receiving notifications. The
+    // owning HistoryService must outlive it.
+    class Subscription {
+    public:
+        Subscription() = default;
+        Subscription(HistoryService& service, std::size_t id);
+        ~Subscription();
+        Subscription(Subscription&& other) noexcept;
+        Subscription& operator=(Subscription&& other) noexcept;
+        Subscription(const Subscription&) = delete;
+        Subscription& operator=(const Subscription&) = delete;
+
+    private:
+        HistoryService* service_ = nullptr;
+        std::size_t id_ = 0;
+    };
+
     // Register a callback fired after every mutation (invoked outside the lock).
-    void subscribe(std::function<void()> callback);
+    // Drop the returned handle to unsubscribe.
+    [[nodiscard]] Subscription subscribe(std::function<void()> callback);
 
 private:
     // Shed the oldest unpinned entries until the history fits max_items. Pinned
@@ -67,11 +87,15 @@ private:
     // Snapshot subscribers under the lock, then invoke them after releasing it.
     void notify();
 
+    // Remove the subscriber with the given id (called by ~Subscription).
+    void unsubscribe(std::size_t id);
+
     HistoryRepository& repository_;
     Clock& clock_;
     int max_items_;
     mutable std::mutex mutex_;
-    std::vector<std::function<void()>> subscribers_;
+    std::map<std::size_t, std::function<void()>> subscribers_;
+    std::size_t next_subscriber_id_ = 0;
 };
 
 } // namespace copyclip::core

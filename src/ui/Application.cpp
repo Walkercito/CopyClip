@@ -1,6 +1,7 @@
 #include "ui/Application.hpp"
 
 #include "core/Enums.hpp"
+#include "core/Platform.hpp"
 #include "ui/Constants.hpp"
 #include "ui/GnomeShortcut.hpp"
 
@@ -18,7 +19,7 @@ namespace copyclip::ui {
 Application::Application(core::HistoryService& history, core::SettingsService& settings,
                          std::filesystem::path clipboard_state_file)
     : history_{history}, settings_{settings},
-      clipboard_state_file_{std::move(clipboard_state_file)},
+      clipboard_state_file_{std::move(clipboard_state_file)}, paster_{core::detect_session()},
       application_{Gtk::Application::create(std::string{kApplicationId})} {
     application_->signal_startup().connect([] { adw_init(); });
     application_->signal_activate().connect(sigc::mem_fun(*this, &Application::on_activate));
@@ -40,7 +41,7 @@ void Application::on_activate() {
     if (!window_) {
         clipboard_ = std::make_unique<GdkClipboardSource>(clipboard_state_file_);
         window_ = std::make_unique<MainWindow>(application_->gobj(), history_.get(),
-                                               settings_.get(), *clipboard_);
+                                               settings_.get(), *clipboard_, paster_);
         clipboard_->start([this](const std::string& text) { history_.get().add(text); });
         application_->hold(); // keep capturing in the background after the window hides
         // On idle (so gsettings calls don't delay the window): onboard a new user,
