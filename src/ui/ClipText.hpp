@@ -21,6 +21,14 @@ struct Preview {
 // point boundaries). `truncated` is true when the preview omits something — the
 // content ran past the limit, or it spanned multiple lines / used tabs — so the
 // card knows to offer "Show all". A limit of 0 keeps the full flattened text.
+// The returned text is always valid UTF-8 (see make_valid_utf8).
 [[nodiscard]] Preview make_preview(std::string_view content, std::size_t max_code_points);
+
+// A copy of `text` that is guaranteed valid UTF-8: every malformed byte or
+// sequence (overlong, surrogate, out-of-range, truncated) is replaced with the
+// Unicode replacement character U+FFFD. Pure (no GLib), so it stays headless-
+// testable. Used to keep binary that slipped into a clip from reaching GTK's
+// label/Pango or Glib::ustring search paths, which reject invalid UTF-8.
+[[nodiscard]] std::string make_valid_utf8(std::string_view text);
 
 } // namespace copyclip::ui
