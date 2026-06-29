@@ -51,7 +51,7 @@ private:
     void schedule_refresh();
     void rebuild_cards();
     void apply_filter();
-    void copy(const std::string& content);
+    void copy(const core::ClipboardEntry& entry);
     void pin(const std::string& content);
     void clear_history();
     void open_settings();

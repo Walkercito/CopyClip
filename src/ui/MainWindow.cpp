@@ -190,9 +190,15 @@ void MainWindow::rebuild_cards() {
     const std::vector<core::ClipboardEntry> entries = history_.get().entries();
     card_count_ = entries.size();
     for (const core::ClipboardEntry& entry : entries) {
+        // Fetch the image bytes lazily, only for image cards.
+        std::vector<std::byte> image;
+        if (entry.kind == core::ClipKind::Image) {
+            image = history_.get().image(entry.content);
+        }
         list_->append(*Gtk::make_managed<ClipCard>(
-            entry, kMaxPreviewChars, [this](const std::string& content) { copy(content); },
-            [this](const std::string& content) { pin(content); }));
+            entry, std::move(image), kMaxPreviewChars,
+            [this](const core::ClipboardEntry& clip) { copy(clip); },
+            [this](const core::ClipboardEntry& clip) { pin(clip.content); }));
     }
 
     apply_filter();
@@ -230,9 +236,21 @@ void MainWindow::apply_filter() {
     stack_->set_visible_child(kPageEmpty);
 }
 
-void MainWindow::copy(const std::string& content) {
+void MainWindow::copy(const core::ClipboardEntry& entry) {
+    // Reconstruct the clipboard payload for the entry's kind. Image bytes are
+    // fetched lazily by hash; rich text carries its HTML alongside the plain text.
+    core::ClipContent content;
+    content.kind = entry.kind;
+    if (entry.kind == core::ClipKind::Image) {
+        content.image = history_.get().image(entry.content);
+        content.image_width = entry.image_width;
+        content.image_height = entry.image_height;
+    } else {
+        content.text = entry.content;
+        content.html = entry.html;
+    }
     // CopyAction handles clipboard + history + auto-paste; the window just hides.
-    if (copy_action_.run(core::ClipContent{.kind = core::ClipKind::Text, .text = content})) {
+    if (copy_action_.run(content)) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
     }
 }

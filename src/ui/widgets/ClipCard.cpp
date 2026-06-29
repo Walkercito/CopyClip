@@ -2,15 +2,27 @@
 
 #include "ui/ClipText.hpp"
 
+#include <gtkmm/enums.h>
 #include <gtkmm/image.h>
+#include <gtkmm/picture.h>
 
 #include <gdkmm/enums.h>
+#include <gdkmm/texture.h>
+
+#include <glibmm/bytes.h>
+#include <glibmm/error.h>
+
+#include <spdlog/spdlog.h>
 
 #include <glib.h>
 
 #include <chrono>
+#include <cstddef>
 #include <ctime>
+#include <format>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace copyclip::ui {
 
@@ -26,6 +38,9 @@ constexpr int kCardGap = 6;
 // Lines of content shown on a collapsed card before it ellipsizes.
 constexpr int kCollapsedLines = 2;
 
+// Target height for an image thumbnail; the picture scales to fit, keeping aspect.
+constexpr int kImageThumbHeight = 160;
+
 // Local-time "YYYY-MM-DD HH:MM" for the card's timestamp, via GLib's date API.
 [[nodiscard]] std::string format_timestamp(std::chrono::system_clock::time_point when) {
     const auto unix_seconds = static_cast<gint64>(std::chrono::system_clock::to_time_t(when));
@@ -40,11 +55,24 @@ constexpr int kCollapsedLines = 2;
     return result;
 }
 
+// A small badge for non-plain-text clips; empty for plain text.
+[[nodiscard]] std::string kind_badge(const core::ClipboardEntry& entry) {
+    if (entry.kind == core::ClipKind::RichText) {
+        return "Rich text";
+    }
+    if (entry.kind == core::ClipKind::Image) {
+        return entry.image_width > 0
+                   ? std::format("Image · {}×{}", entry.image_width, entry.image_height)
+                   : std::string{"Image"};
+    }
+    return {};
+}
+
 } // namespace
 
-ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, ActionCallback on_copy,
-                   ActionCallback on_pin)
-    : content_{entry.content}, max_chars_{max_chars}, on_copy_{std::move(on_copy)},
+ClipCard::ClipCard(const core::ClipboardEntry& entry, std::vector<std::byte> image,
+                   std::size_t max_chars, ActionCallback on_copy, ActionCallback on_pin)
+    : entry_{entry}, image_{std::move(image)}, max_chars_{max_chars}, on_copy_{std::move(on_copy)},
       on_pin_{std::move(on_pin)} {
     add_css_class("card");
     set_margin_bottom(kCardGap);
@@ -59,6 +87,12 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, Act
         pin->add_css_class("accent");
         top_row->append(*pin);
     }
+    if (const std::string badge = kind_badge(entry); !badge.empty()) {
+        auto* badge_label = Gtk::make_managed<Gtk::Label>(badge);
+        badge_label->add_css_class("dim-label");
+        badge_label->add_css_class("caption");
+        top_row->append(*badge_label);
+    }
     auto* spacer = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
     spacer->set_hexpand(true);
     top_row->append(*spacer);
@@ -69,21 +103,41 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, Act
     top_row->append(*time_label);
     layout->append(*top_row);
 
-    content_label_ = Gtk::make_managed<Gtk::Label>();
-    content_label_->set_halign(Gtk::Align::START);
-    content_label_->set_xalign(0.0F);
-    content_label_->set_wrap(true);
-    content_label_->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
-    layout->append(*content_label_);
+    if (entry.kind == core::ClipKind::Image) {
+        // Render a scaled thumbnail; fall back to a label if the bytes won't decode.
+        try {
+            const Glib::RefPtr<Glib::Bytes> bytes =
+                Glib::Bytes::create(image_.data(), image_.size());
+            auto* picture = Gtk::make_managed<Gtk::Picture>();
+            picture->set_paintable(Gdk::Texture::create_from_bytes(bytes));
+            picture->set_can_shrink(true);
+            picture->set_content_fit(Gtk::ContentFit::CONTAIN);
+            picture->set_halign(Gtk::Align::START);
+            picture->set_size_request(-1, kImageThumbHeight);
+            layout->append(*picture);
+        } catch (const Glib::Error& error) {
+            spdlog::warn("could not render clipboard image: {}", error.what());
+            auto* fallback = Gtk::make_managed<Gtk::Label>("[image]");
+            fallback->add_css_class("dim-label");
+            layout->append(*fallback);
+        }
+    } else {
+        content_label_ = Gtk::make_managed<Gtk::Label>();
+        content_label_->set_halign(Gtk::Align::START);
+        content_label_->set_xalign(0.0F);
+        content_label_->set_wrap(true);
+        content_label_->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+        layout->append(*content_label_);
 
-    toggle_button_ = Gtk::make_managed<Gtk::Button>();
-    toggle_button_->add_css_class("flat");
-    toggle_button_->set_halign(Gtk::Align::END);
-    toggle_button_->signal_clicked().connect(sigc::mem_fun(*this, &ClipCard::toggle_expand));
-    layout->append(*toggle_button_);
+        toggle_button_ = Gtk::make_managed<Gtk::Button>();
+        toggle_button_->add_css_class("flat");
+        toggle_button_->set_halign(Gtk::Align::END);
+        toggle_button_->signal_clicked().connect(sigc::mem_fun(*this, &ClipCard::toggle_expand));
+        layout->append(*toggle_button_);
+        render_text();
+    }
 
     set_child(*layout);
-    render_content();
 
     gesture_ = Gtk::GestureClick::create();
     gesture_->set_button(GDK_BUTTON_PRIMARY);
@@ -91,10 +145,10 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::size_t max_chars, Act
     add_controller(gesture_);
 }
 
-void ClipCard::render_content() {
-    const Preview preview = make_preview(content_, max_chars_);
+void ClipCard::render_text() {
+    const Preview preview = make_preview(entry_.content, max_chars_);
 
-    content_label_->set_text(expanded_ ? content_ : preview.text);
+    content_label_->set_text(expanded_ ? entry_.content : preview.text);
     content_label_->set_ellipsize(expanded_ ? Pango::EllipsizeMode::NONE
                                             : Pango::EllipsizeMode::END);
     content_label_->set_lines(expanded_ ? -1 : kCollapsedLines);
@@ -107,23 +161,26 @@ void ClipCard::render_content() {
 
 void ClipCard::toggle_expand() {
     expanded_ = !expanded_;
-    render_content();
+    render_text();
 }
 
 void ClipCard::on_pressed(int /*n_press*/, double x, double y) {
     // Presses on the expand/collapse button are handled by the button itself; the
     // card must not also copy/pin (which would rebuild the list and undo the
-    // toggle).
-    if (Gtk::Widget* target = pick(x, y, Gtk::PickFlags::DEFAULT);
-        target != nullptr && (target == toggle_button_ || target->is_ancestor(*toggle_button_))) {
-        return;
+    // toggle). Image cards have no toggle button.
+    if (toggle_button_ != nullptr) {
+        if (Gtk::Widget* target = pick(x, y, Gtk::PickFlags::DEFAULT);
+            target != nullptr &&
+            (target == toggle_button_ || target->is_ancestor(*toggle_button_))) {
+            return;
+        }
     }
     const Gdk::ModifierType state = gesture_->get_current_event_state();
     const bool ctrl = (state & Gdk::ModifierType::CONTROL_MASK) == Gdk::ModifierType::CONTROL_MASK;
     if (ctrl) {
-        on_pin_(content_);
+        on_pin_(entry_);
     } else {
-        on_copy_(content_);
+        on_copy_(entry_);
     }
 }
 
