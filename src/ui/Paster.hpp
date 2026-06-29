@@ -1,22 +1,22 @@
 #pragma once
 
-// Simulates the paste shortcut (Ctrl+V) into the focused window, using the input
-// tool that fits the session (xdotool on X11; wtype then ydotool on Wayland).
-// Best-effort: a no-op if no tool succeeds — the clip is on the clipboard either
-// way, so the user can still paste manually.
-
-#include "core/Enums.hpp"
+// Abstract paste capability: simulate pasting the clipboard into the focused
+// window. Injected so the copy use case can be exercised without spawning input
+// tools (see KeystrokePaster for the real implementation).
 
 namespace copyclip::ui {
 
 class Paster {
 public:
-    explicit Paster(core::SessionType session);
+    Paster() = default;
+    virtual ~Paster() = default;
 
-    void paste() const;
+    Paster(const Paster&) = delete;
+    Paster& operator=(const Paster&) = delete;
+    Paster(Paster&&) = delete;
+    Paster& operator=(Paster&&) = delete;
 
-private:
-    core::SessionType session_;
+    virtual void paste() const = 0;
 };
 
 } // namespace copyclip::ui

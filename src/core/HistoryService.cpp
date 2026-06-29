@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -142,9 +143,43 @@ std::vector<ClipboardEntry> HistoryService::entries() const {
     return sorted(repository_.all());
 }
 
-void HistoryService::subscribe(std::function<void()> callback) {
+HistoryService::Subscription HistoryService::subscribe(std::function<void()> callback) {
     const std::scoped_lock lock{mutex_};
-    subscribers_.push_back(std::move(callback));
+    const std::size_t id = next_subscriber_id_++;
+    subscribers_.emplace(id, std::move(callback));
+    return Subscription{*this, id};
+}
+
+void HistoryService::unsubscribe(std::size_t id) {
+    const std::scoped_lock lock{mutex_};
+    subscribers_.erase(id);
+}
+
+HistoryService::Subscription::Subscription(HistoryService& service, std::size_t id)
+    : service_{&service}, id_{id} {}
+
+HistoryService::Subscription::~Subscription() {
+    if (service_ != nullptr) {
+        service_->unsubscribe(id_);
+    }
+}
+
+HistoryService::Subscription::Subscription(Subscription&& other) noexcept
+    : service_{other.service_}, id_{other.id_} {
+    other.service_ = nullptr;
+}
+
+HistoryService::Subscription&
+HistoryService::Subscription::operator=(Subscription&& other) noexcept {
+    if (this != &other) {
+        if (service_ != nullptr) {
+            service_->unsubscribe(id_);
+        }
+        service_ = other.service_;
+        id_ = other.id_;
+        other.service_ = nullptr;
+    }
+    return *this;
 }
 
 void HistoryService::enforce_cap() {
@@ -190,7 +225,10 @@ void HistoryService::notify() {
     std::vector<std::function<void()>> snapshot;
     {
         const std::scoped_lock lock{mutex_};
-        snapshot = subscribers_;
+        snapshot.reserve(subscribers_.size());
+        for (const auto& entry : subscribers_) {
+            snapshot.push_back(entry.second);
+        }
     }
     for (const std::function<void()>& callback : snapshot) {
         callback();

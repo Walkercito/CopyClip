@@ -137,9 +137,21 @@ TEST(HistoryServiceTest, CapEvictsOldestUnpinned) {
 TEST(HistoryServiceTest, SubscribersNotifiedOnChange) {
     ServiceHarness harness;
     std::vector<int> calls;
-    harness.service.subscribe([&calls] { calls.push_back(1); });
+    const auto sub = harness.service.subscribe([&calls] { calls.push_back(1); });
     harness.service.add("x");
     EXPECT_EQ(calls, (std::vector<int>{1}));
+}
+
+TEST(HistoryServiceTest, DroppingSubscriptionStopsNotifications) {
+    ServiceHarness harness;
+    int calls = 0;
+    {
+        const auto sub = harness.service.subscribe([&calls] { ++calls; });
+        harness.service.add("a");
+        EXPECT_EQ(calls, 1);
+    } // sub goes out of scope -> unsubscribed
+    harness.service.add("b");
+    EXPECT_EQ(calls, 1); // no further notifications
 }
 
 TEST(HistoryServiceTest, ClearUnpinnedKeepsOnlyPinned) {
@@ -191,7 +203,8 @@ TEST(HistoryServiceTest, EvictionKeepsPinnedAndMostRecentUnpinned) {
 TEST(HistoryServiceTest, NotifiesSubscribersOutsideTheLock) {
     ServiceHarness harness;
     std::vector<std::size_t> observed_sizes;
-    harness.service.subscribe([&] { observed_sizes.push_back(harness.service.entries().size()); });
+    const auto sub = harness.service.subscribe(
+        [&] { observed_sizes.push_back(harness.service.entries().size()); });
     harness.service.add("x");
     ASSERT_EQ(observed_sizes.size(), 1U);
     EXPECT_EQ(observed_sizes.front(), 1U);

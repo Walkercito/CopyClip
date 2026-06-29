@@ -8,6 +8,7 @@
 
 #include <gdkmm/clipboard.h>
 
+#include <giomm/cancellable.h>
 #include <glibmm/refptr.h>
 #include <sigc++/connection.h>
 
@@ -44,6 +45,9 @@ private:
     std::function<void(const std::string&)> on_change_;
     std::optional<std::string> last_text_;
     sigc::connection changed_connection_;
+    // Cancelled on stop/destruction; the async read callback captures a copy and
+    // bails before touching a possibly-destroyed `this`.
+    Glib::RefPtr<Gio::Cancellable> cancellable_;
 };
 
 } // namespace copyclip::ui

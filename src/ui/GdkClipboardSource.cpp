@@ -56,11 +56,15 @@ GdkClipboardSource::GdkClipboardSource(std::filesystem::path state_file)
     : clipboard_{default_clipboard()}, state_file_{std::move(state_file)} {}
 
 GdkClipboardSource::~GdkClipboardSource() {
+    if (cancellable_) {
+        cancellable_->cancel();
+    }
     changed_connection_.disconnect();
 }
 
 void GdkClipboardSource::start(std::function<void(const std::string&)> on_change) {
     on_change_ = std::move(on_change);
+    cancellable_ = Gio::Cancellable::create();
     // Seed from the remembered clipboard so the content already present at launch
     // isn't re-captured.
     const std::string remembered = read_state(state_file_);
@@ -72,6 +76,9 @@ void GdkClipboardSource::start(std::function<void(const std::string&)> on_change
 }
 
 void GdkClipboardSource::stop() {
+    if (cancellable_) {
+        cancellable_->cancel();
+    }
     changed_connection_.disconnect();
     on_change_ = nullptr;
 }
@@ -85,34 +92,43 @@ void GdkClipboardSource::write(const std::string& text) {
 }
 
 void GdkClipboardSource::on_changed() {
-    clipboard_->read_text_async([this](Glib::RefPtr<Gio::AsyncResult>& result) {
-        Glib::ustring text;
-        try {
-            text = clipboard_->read_text_finish(result);
-        } catch (const Glib::Error& error) {
-            // Non-text content (an image, etc.) or a transient read error — skip.
-            spdlog::trace("clipboard read skipped: {}", error.what());
-            return;
-        }
-        // React only to a genuine content change. GdkClipboard::changed also fires
-        // on ownership changes (focus/window events) without the text changing;
-        // without this guard, clearing the history and then moving the window would
-        // re-capture the unchanged clipboard.
-        if (text.empty() || text.raw() == last_text_) {
-            return;
-        }
-        last_text_ = text.raw();
-        write_state(state_file_, text.raw());
-        try {
-            if (on_change_) {
-                on_change_(text.raw());
+    const Glib::RefPtr<Gio::Cancellable> cancellable = cancellable_;
+    clipboard_->read_text_async(
+        [this, cancellable](Glib::RefPtr<Gio::AsyncResult>& result) {
+            // The source may be destroyed before this fires. The captured cancellable
+            // outlives `this`; once it is cancelled (in stop/destructor) we bail
+            // before dereferencing the dangling source.
+            if (cancellable->is_cancelled()) {
+                return;
             }
-        } catch (const std::exception& error) {
-            // The callback records to the history DB; a storage failure must not
-            // escape across the GLib C callback boundary.
-            spdlog::error("failed to record clipboard entry: {}", error.what());
-        }
-    });
+            Glib::ustring text;
+            try {
+                text = clipboard_->read_text_finish(result);
+            } catch (const Glib::Error& error) {
+                // Non-text content (an image, etc.) or a transient read error — skip.
+                spdlog::trace("clipboard read skipped: {}", error.what());
+                return;
+            }
+            // React only to a genuine content change. GdkClipboard::changed also fires
+            // on ownership changes (focus/window events) without the text changing;
+            // without this guard, clearing the history and then moving the window would
+            // re-capture the unchanged clipboard.
+            if (text.empty() || text.raw() == last_text_) {
+                return;
+            }
+            last_text_ = text.raw();
+            write_state(state_file_, text.raw());
+            try {
+                if (on_change_) {
+                    on_change_(text.raw());
+                }
+            } catch (const std::exception& error) {
+                // The callback records to the history DB; a storage failure must not
+                // escape across the GLib C callback boundary.
+                spdlog::error("failed to record clipboard entry: {}", error.what());
+            }
+        },
+        cancellable_);
 }
 
 } // namespace copyclip::ui

@@ -27,7 +27,8 @@ add_library(
   Application.cpp
   GdkClipboardSource.cpp
   GnomeShortcut.cpp
-  Paster.cpp
+  KeystrokePaster.cpp
+  CopyAction.cpp
   widgets/ClipCard.cpp
   dialogs/SettingsDialog.cpp
   dialogs/FirstRunDialog.cpp)

@@ -1,7 +1,6 @@
 #include "ui/MainWindow.hpp"
 
 #include "config/Constants.hpp"
-#include "core/Platform.hpp"
 #include "ui/Constants.hpp"
 #include "ui/Theme.hpp"
 #include "ui/widgets/ClipCard.hpp"
@@ -25,7 +24,6 @@ namespace copyclip::ui {
 namespace {
 
 constexpr int kPlaceholderIconSize = 48;
-constexpr unsigned int kPasteDelayMs = 120;
 constexpr const char* kPageList = "list";
 constexpr const char* kPageEmpty = "empty";
 
@@ -44,13 +42,23 @@ constexpr const char* kPageEmpty = "empty";
 } // namespace
 
 MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
-                       core::SettingsService& settings, core::ClipboardSource& clipboard)
-    : history_{history}, clipboard_{clipboard}, settings_{settings},
-      paster_{core::detect_session()} {
+                       core::SettingsService& settings, core::ClipboardSource& clipboard,
+                       Paster& paster)
+    : history_{history}, settings_{settings}, copy_action_{clipboard, history, settings, paster} {
     build_ui(application);
-    history_.get().subscribe([this] { schedule_refresh(); });
+    history_subscription_ = history_.get().subscribe([this] { schedule_refresh(); });
     apply_theme(settings.settings().theme);
     rebuild_cards();
+}
+
+MainWindow::~MainWindow() {
+    // Unsubscribe first so a late notification can't reach a half-torn-down window,
+    // then destroy the window so its child widgets — and the signal slots bound to
+    // `this` — die with it rather than later with the GtkApplication.
+    history_subscription_ = {};
+    if (window_ != nullptr) {
+        gtk_window_destroy(GTK_WINDOW(window_));
+    }
 }
 
 void MainWindow::build_ui(GtkApplication* application) {
@@ -222,17 +230,9 @@ void MainWindow::apply_filter() {
 }
 
 void MainWindow::copy(const std::string& content) {
-    clipboard_.get().write(content);
-    history_.get().add(content);
-    const core::Settings& settings = settings_.get().settings();
-    // Hide when asked (auto_hide), and also when auto-pasting so focus returns to
-    // the target window before the keystroke is sent.
-    if (settings.auto_hide_on_copy || settings.auto_paste) {
+    // CopyAction handles clipboard + history + auto-paste; the window just hides.
+    if (copy_action_.run(content)) {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
-    }
-    if (settings.auto_paste) {
-        // Give focus time to return before sending the paste keystroke.
-        Glib::signal_timeout().connect_once([this] { paster_.paste(); }, kPasteDelayMs);
     }
 }
 
@@ -245,9 +245,14 @@ void MainWindow::clear_history() {
 }
 
 void MainWindow::open_settings() {
-    settings_dialog_ =
-        std::make_unique<SettingsDialog>(GTK_WIDGET(window_), settings_.get(),
-                                         [this] { apply_theme(settings_.get().settings().theme); });
+    if (settings_dialog_) {
+        return; // already open — a second dialog would leave dangling row callbacks
+    }
+    settings_dialog_ = std::make_unique<SettingsDialog>(
+        GTK_WIDGET(window_), settings_.get(),
+        [this] { apply_theme(settings_.get().settings().theme); },
+        // On close, drop the wrapper (on idle, not mid-signal) so it can reopen.
+        [this] { Glib::signal_idle().connect_once([this] { settings_dialog_.reset(); }); });
 }
 
 bool MainWindow::matches(const std::string& content) const {
