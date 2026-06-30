@@ -23,8 +23,20 @@
 #include <string_view>
 #include <vector>
 
+#ifdef __GLIBC__
+#include <malloc.h> // mallopt / M_ARENA_MAX — cap per-thread arenas (glibc only)
+#endif
+
 int main(int argc, char** argv) {
     using namespace copyclip;
+
+    // Cap glibc's malloc arenas before anything allocates much: GLib/GTK spawn
+    // several worker threads and unbounded per-thread arenas keep freed memory
+    // off the OS, so a background app's RSS only ever climbs. mallopt is reliable
+    // here (the env var is read by glibc too early, before main runs).
+#ifdef __GLIBC__
+    mallopt(M_ARENA_MAX, ui::kMallocArenaMax);
+#endif
 
     // --background (used by the autostart entry) starts hidden but keeps capturing.
     // Consume it here so GTK's option parser never sees this non-GTK flag; forward
@@ -53,6 +65,11 @@ int main(int argc, char** argv) {
     if (g_getenv(ui::kDisplayEnv.data()) != nullptr) {
         g_setenv(ui::kGdkBackendEnv.data(), ui::kGdkBackendX11.data(), FALSE);
     }
+
+    // Render in software: this window is a rarely-shown popup, so the GL renderer
+    // only pulls the Mesa+LLVM GPU stack into RAM for no benefit. FALSE leaves any
+    // user-set GSK_RENDERER untouched.
+    g_setenv(ui::kGskRendererEnv.data(), ui::kGskRendererCairo.data(), FALSE);
 
     runtime::configure_logging();
     try {

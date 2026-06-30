@@ -46,7 +46,6 @@ private:
     void on_pressed(int n_press, double x, double y);
 
     core::ClipboardEntry entry_;
-    std::vector<std::byte> image_;
     std::size_t max_chars_;
     bool expanded_ = false;
     Gtk::Label* content_label_ = nullptr;  // null for image cards

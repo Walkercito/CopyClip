@@ -24,6 +24,10 @@
 #include <utility>
 #include <vector>
 
+#ifdef __GLIBC__
+#include <malloc.h> // malloc_trim — return freed heap to the OS on hide (glibc only)
+#endif
+
 namespace copyclip::ui {
 
 namespace {
@@ -31,6 +35,15 @@ namespace {
 constexpr int kPlaceholderIconSize = 48;
 constexpr const char* kPageList = "list";
 constexpr const char* kPageEmpty = "empty";
+
+// Return freed heap pages to the OS; glibc otherwise keeps them in its arenas, so
+// RSS never falls back after a peak (e.g. an image card's decode buffers). A free
+// function so the glibc guard stays out of the G_CALLBACK macro at the call site.
+void trim_heap() {
+#ifdef __GLIBC__
+    malloc_trim(0);
+#endif
+}
 
 // The window decoration layout with the maximize button removed (it appears at
 // most once, in either button group).
@@ -95,6 +108,10 @@ void MainWindow::build_ui(GtkApplication* application) {
                          gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
                          return TRUE;
                      }),
+                     nullptr);
+
+    // Trim on every hide — close, copy, and toggle all route through this signal.
+    g_signal_connect(window_, "hide", G_CALLBACK(+[](GtkWidget*, gpointer) { trim_heap(); }),
                      nullptr);
 
     // The window must stay resizable for libadwaita to present dialogs as bottom

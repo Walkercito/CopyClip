@@ -7,7 +7,10 @@
 #include <gtkmm/picture.h>
 
 #include <gdkmm/enums.h>
+#include <gdkmm/pixbuf.h>
 #include <gdkmm/texture.h>
+
+#include <giomm/memoryinputstream.h>
 
 #include <glibmm/bytes.h>
 #include <glibmm/error.h>
@@ -44,6 +47,11 @@ constexpr int kCollapsedLines = 2;
 // Target height for an image thumbnail; the picture scales to fit, keeping aspect.
 constexpr int kImageThumbHeight = 128;
 
+// Height we actually decode the image to (2× the display height, for HiDPI
+// crispness): a full-resolution decode costs ~33 MB for a 4K screenshot, a
+// thumbnail this tall only tens of KB, and the card never shows more than this.
+constexpr int kImageThumbDecodeHeight = kImageThumbHeight * 2;
+
 // Gap between the leading content-type icon and the content column.
 constexpr int kRowSpacing = 10;
 // Gap between items in the subordinate metadata row.
@@ -76,7 +84,7 @@ constexpr int kMetaIconSize = 12;
 
 ClipCard::ClipCard(const core::ClipboardEntry& entry, std::vector<std::byte> image,
                    std::size_t max_chars, ActionCallback on_copy, ActionCallback on_pin)
-    : entry_{entry}, image_{std::move(image)}, max_chars_{max_chars}, on_copy_{std::move(on_copy)},
+    : entry_{entry}, max_chars_{max_chars}, on_copy_{std::move(on_copy)},
       on_pin_{std::move(on_pin)} {
     add_css_class("card");
     set_margin_bottom(kCardGap);
@@ -98,12 +106,23 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::vector<std::byte> ima
     column->set_hexpand(true);
 
     if (entry.kind == core::ClipKind::Image) {
-        // Render a scaled thumbnail; fall back to a label if the bytes won't decode.
+        // Decode to a thumbnail, not the full image: scaling at decode time keeps
+        // only a small texture resident (a 4K screenshot is ~33 MB at full size).
+        // Fall back to a label if the bytes won't decode.
         try {
-            const Glib::RefPtr<Glib::Bytes> bytes =
-                Glib::Bytes::create(image_.data(), image_.size());
+            const Glib::RefPtr<Glib::Bytes> bytes = Glib::Bytes::create(image.data(), image.size());
+            const Glib::RefPtr<Gio::MemoryInputStream> stream = Gio::MemoryInputStream::create();
+            stream->add_bytes(bytes);
+            // Scale down large images; never up. A clip shorter than the thumbnail
+            // decodes at its own height (crisp and cheaper) when we know it.
+            const int decode_height =
+                (entry.image_height > 0 && entry.image_height < kImageThumbDecodeHeight)
+                    ? entry.image_height
+                    : kImageThumbDecodeHeight;
+            const Glib::RefPtr<Gdk::Pixbuf> thumbnail =
+                Gdk::Pixbuf::create_from_stream_at_scale(stream, -1, decode_height, true);
             auto* picture = Gtk::make_managed<Gtk::Picture>();
-            picture->set_paintable(Gdk::Texture::create_from_bytes(bytes));
+            picture->set_paintable(Gdk::Texture::create_for_pixbuf(thumbnail));
             picture->set_can_shrink(true);
             picture->set_content_fit(Gtk::ContentFit::CONTAIN);
             picture->set_halign(Gtk::Align::START);

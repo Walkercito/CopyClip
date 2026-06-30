@@ -36,4 +36,16 @@ inline constexpr std::string_view kDisplayEnv{"DISPLAY"};
 inline constexpr std::string_view kGdkBackendEnv{"GDK_BACKEND"};
 inline constexpr std::string_view kGdkBackendX11{"x11"};
 
+// Force GTK's software (cairo) GSK renderer. The default GL renderer pulls the
+// Mesa+LLVM GPU stack into the process for a popup that is hidden almost all the
+// time, where GPU acceleration buys nothing; cairo draws the small window with
+// no GL context.
+inline constexpr std::string_view kGskRendererEnv{"GSK_RENDERER"};
+inline constexpr std::string_view kGskRendererCairo{"cairo"};
+
+// Cap glibc's per-thread malloc arenas. GLib/GTK spawn ~10 helper threads, and
+// glibc's default (8×CPUs arenas) keeps freed memory off the OS so RSS only ever
+// grows; two arenas suffice for a mostly-idle background app.
+inline constexpr int kMallocArenaMax = 2;
+
 } // namespace copyclip::ui
