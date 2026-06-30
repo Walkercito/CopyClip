@@ -15,7 +15,7 @@ inline constexpr std::string_view kAppId = "copyclip";
 // Version when running from a source tree without installed package metadata.
 inline constexpr std::string_view kAppVersion = "0.0.0";
 
-inline constexpr int kDefaultMaxHistoryItems = 200;
+inline constexpr int kDefaultMaxHistoryItems = 70;
 inline constexpr std::string_view kHistoryDbName = "history.db";
 inline constexpr std::string_view kSettingsFileName = "settings.json";
 inline constexpr std::string_view kInstanceSocketName = "copyclip.sock";
