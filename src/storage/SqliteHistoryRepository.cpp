@@ -4,8 +4,11 @@
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
 
+#include <sqlite3.h>
+
 #include <spdlog/spdlog.h>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -14,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace copyclip::storage {
@@ -35,6 +39,25 @@ constexpr const char* kSchema = "CREATE TABLE IF NOT EXISTS entries ("
                                 "pinned       INTEGER NOT NULL DEFAULT 0)";
 constexpr const char* kSchemaImages =
     "CREATE TABLE IF NOT EXISTS images (hash TEXT PRIMARY KEY, png BLOB NOT NULL)";
+constexpr const char* kSchemaMetadata =
+    "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)";
+
+constexpr const char* kMetadataOwnerKey = "owner";
+constexpr const char* kMetadataOwnerValue = "copyclip";
+constexpr const char* kInsertOwner = "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)";
+constexpr const char* kSelectOwner = "SELECT value FROM metadata WHERE key = ?";
+constexpr const char* kCheckTable = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?";
+// Any user (non-internal) table exists -- distinguishes an empty database from a
+// foreign one that already holds data.
+constexpr const char* kAnyUserTable =
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1";
+constexpr const char* kTableEntries = "entries";
+constexpr const char* kTableMetadata = "metadata";
+
+// Suffix (with a UTC timestamp) appended when moving a foreign database aside, plus
+// the SQLite sidecar files that must move with the main database file.
+constexpr std::string_view kArchiveMarker = ".incompatible.";
+constexpr std::array<const char*, 3> kSqliteSidecarSuffixes{"-wal", "-shm", "-journal"};
 
 // A second process can touch the same DB (e.g. the global-shortcut launch running
 // alongside a COPYCLIP_STANDALONE dev instance). WAL allows a reader and a writer
@@ -68,6 +91,7 @@ constexpr int kColImageHeight = 4;
 constexpr int kColCreatedAt = 5;
 constexpr int kColPinned = 6;
 constexpr int kColImagePng = 0;      // kSelectImage projection
+constexpr int kColMetadataValue = 0; // kSelectOwner projection
 constexpr int kPragmaNameColumn = 1; // PRAGMA table_info: column 1 is the name
 
 // Bind-parameter ordinals (1-based, as SQLite numbers them).
@@ -217,9 +241,8 @@ void add_column_if_missing(SQLite::Database& database, const char* column,
     }
 }
 
-} // namespace
-
-std::filesystem::path SqliteHistoryRepository::ensure_parent(const std::filesystem::path& db_path) {
+// Create db_path's parent directory if missing; returns db_path for chaining.
+std::filesystem::path ensure_parent(const std::filesystem::path& db_path) {
     const std::filesystem::path parent = db_path.parent_path();
     if (!parent.empty()) {
         std::filesystem::create_directories(parent);
@@ -227,12 +250,97 @@ std::filesystem::path SqliteHistoryRepository::ensure_parent(const std::filesyst
     return db_path;
 }
 
+[[nodiscard]] bool table_exists(SQLite::Database& database, const char* name) {
+    SQLite::Statement query{database, kCheckTable};
+    query.bind(kParamFirst, name);
+    return query.executeStep();
+}
+
+// Whether an existing file is, or looks like, a CopyClip database we should keep: it
+// carries our owner marker, has the `entries` table (covering databases made before
+// the marker existed, which must be migrated in place, never wiped), or has no user
+// tables at all -- an empty file, including a sibling instance's database caught
+// mid-initialization, which has nothing to preserve and must not be archived out
+// from under a racing first run. A genuinely foreign database (real tables, none
+// ours) returns false. A file that is not a database is archived; one we merely
+// cannot read right now (locked, mid-write) is kept, so a transient lock never costs
+// the user their history.
+[[nodiscard]] bool looks_like_our_db(const std::filesystem::path& db_path) {
+    try {
+        SQLite::Database database{db_path.string(), SQLite::OPEN_READONLY};
+        database.setBusyTimeout(kBusyTimeoutMs);
+        if (table_exists(database, kTableMetadata)) {
+            SQLite::Statement owner{database, kSelectOwner};
+            owner.bind(kParamFirst, kMetadataOwnerKey);
+            if (owner.executeStep() &&
+                owner.getColumn(kColMetadataValue).getString() == kMetadataOwnerValue) {
+                return true;
+            }
+        }
+        if (table_exists(database, kTableEntries)) {
+            return true;
+        }
+        SQLite::Statement any_table{database, kAnyUserTable};
+        return !any_table.executeStep(); // no user tables: an empty file -- adopt it
+    } catch (const SQLite::Exception& error) {
+        if (error.getErrorCode() == SQLITE_NOTADB) {
+            spdlog::warn("file at {} is not a database; archiving it aside", db_path.string());
+            return false;
+        }
+        spdlog::warn("could not read the existing history database ({}); leaving it in place",
+                     error.what());
+        return true;
+    }
+}
+
+// Move a foreign database aside so a fresh CopyClip database can take its place. The
+// main file moves first and a failure THROWS -- we must never fall through and
+// adopt/stamp a stranger's database. Its WAL/SHM/journal sidecars then move
+// best-effort with the same suffix (renaming only the main file would orphan them
+// and let the fresh database recover stale data from a leftover WAL). Returns
+// db_path for chaining.
+[[nodiscard]] std::filesystem::path archive_foreign_db(const std::filesystem::path& db_path) {
+    const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
+    const std::string suffix = std::string{kArchiveMarker} + std::format("{:%Y%m%d_%H%M%S}", now);
+    std::filesystem::rename(db_path, db_path.string() + suffix); // throws on failure
+    for (const char* sidecar : kSqliteSidecarSuffixes) {
+        const std::filesystem::path from{db_path.string() + sidecar};
+        std::error_code error;
+        if (std::filesystem::exists(from, error)) {
+            std::filesystem::rename(from, from.string() + suffix, error);
+            if (error) {
+                spdlog::warn("could not archive sidecar {}: {}", from.string(), error.message());
+            }
+        }
+    }
+    spdlog::warn("history database at {} is not ours; archived it aside ({}) and starting fresh",
+                 db_path.string(), suffix);
+    return db_path;
+}
+
+// Ensure the parent directory exists, then move aside any pre-existing file that
+// isn't ours so the constructor opens onto a clean CopyClip database.
+[[nodiscard]] std::filesystem::path prepare_db_path(const std::filesystem::path& db_path) {
+    ensure_parent(db_path);
+    if (std::filesystem::is_regular_file(db_path) && !looks_like_our_db(db_path)) {
+        return archive_foreign_db(db_path);
+    }
+    return db_path;
+}
+
+} // namespace
+
 SqliteHistoryRepository::SqliteHistoryRepository(const std::filesystem::path& db_path)
-    : database_{ensure_parent(db_path), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE} {
+    : database_{prepare_db_path(db_path), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE} {
     database_.exec(kPragmaWal);
     database_.setBusyTimeout(kBusyTimeoutMs);
     database_.exec(kSchema);
     database_.exec(kSchemaImages);
+    database_.exec(kSchemaMetadata);
+    SQLite::Statement statement{database_, kInsertOwner};
+    statement.bind(kParamFirst, kMetadataOwnerKey);
+    statement.bind(kParamSecond, kMetadataOwnerValue);
+    statement.exec();
     // Upgrade a DB created before rich-text/image support added these columns.
     add_column_if_missing(database_, "kind", "TEXT NOT NULL DEFAULT 'text'");
     add_column_if_missing(database_, "html", "TEXT NOT NULL DEFAULT ''");

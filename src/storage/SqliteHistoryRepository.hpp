@@ -19,8 +19,10 @@ namespace copyclip::storage {
 class SqliteHistoryRepository final : public core::HistoryRepository {
 public:
     // Opens (creating if absent) the database at `db_path`, creating the parent
-    // directory first so the open never fails on a missing dir. Throws
-    // SQLite::Exception on error.
+    // directory first so the open never fails on a missing dir. A pre-existing file
+    // that isn't ours is moved aside first. Throws SQLite::Exception on a database
+    // error, or std::filesystem::filesystem_error if a foreign database can't be
+    // archived (so we never adopt and stamp a stranger's file).
     explicit SqliteHistoryRepository(const std::filesystem::path& db_path);
 
     void add(const core::ClipboardEntry& entry) override;
@@ -33,11 +35,6 @@ public:
     [[nodiscard]] std::vector<std::byte> image(const std::string& hash) const override;
 
 private:
-    // Creates the parent directory of `db_path` and returns it unchanged. Called
-    // in the member initializer list so the directory exists before `database_`
-    // opens the file.
-    [[nodiscard]] static std::filesystem::path ensure_parent(const std::filesystem::path& db_path);
-
     // SQLite::Database methods aren't const (executeStep advances a cursor, exec
     // mutates), yet all() is a logical read that must stay const per the
     // interface. `mutable` lets the const path run statements without casting away

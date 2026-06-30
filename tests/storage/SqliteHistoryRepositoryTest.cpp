@@ -10,9 +10,13 @@
 #include "core/Models.hpp"
 #include "support/TempDir.hpp"
 
+#include <SQLiteCpp/Column.h>
+#include <SQLiteCpp/Database.h>
+
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -54,6 +58,18 @@ protected:
     [[nodiscard]] storage::SqliteHistoryRepository repo() const {
         return storage::SqliteHistoryRepository{db_path()};
     }
+
+    // The first archived (.incompatible) database copy beside the live one, if any.
+    [[nodiscard]] std::filesystem::path archived_copy_path() const {
+        for (const auto& entry : std::filesystem::directory_iterator(temp_dir_.path())) {
+            if (entry.path().filename().string().find(".incompatible.") != std::string::npos) {
+                return entry.path();
+            }
+        }
+        return {};
+    }
+
+    [[nodiscard]] bool archived_copy_exists() const { return !archived_copy_path().empty(); }
 
 private:
     TempDir temp_dir_;
@@ -243,6 +259,102 @@ TEST_F(SqliteHistoryRepositoryTest, SkipsMalformedRowsInsteadOfThrowing) {
     const std::vector<core::ClipboardEntry> entries = repository.all(); // never throws
     ASSERT_EQ(entries.size(), 1U);
     EXPECT_EQ(entries.front().content, "good");
+}
+
+// Reopening our own database keeps its data and never trips the archiver -- the
+// concurrent-open case the WAL/busy-timeout support exists for.
+TEST_F(SqliteHistoryRepositoryTest, ReopeningOwnDatabaseKeepsDataAndDoesNotArchive) {
+    {
+        auto repository = repo();
+        repository.add(core::ClipboardEntry{
+            .content = "mine", .created_at = date_utc(2026, 1, 1), .pinned = false});
+    }
+    auto reopened = repo();
+    const std::vector<core::ClipboardEntry> entries = reopened.all();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries.front().content, "mine");
+    EXPECT_FALSE(archived_copy_exists());
+}
+
+// A database from before the owner marker existed (only the `entries` table, no
+// `metadata`) is migrated in place, never archived -- guards against wiping a real
+// user's history on upgrade.
+TEST_F(SqliteHistoryRepositoryTest, LegacyDatabaseWithoutMarkerIsPreserved) {
+    {
+        SQLite::Database old{db_path(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
+        old.exec("CREATE TABLE entries (content TEXT PRIMARY KEY, created_at TEXT NOT NULL, "
+                 "pinned INTEGER NOT NULL DEFAULT 0)");
+        old.exec("INSERT INTO entries (content, created_at) "
+                 "VALUES ('legacy', '2026-01-01T00:00:00')");
+    }
+
+    auto repository = repo();
+    const std::vector<core::ClipboardEntry> entries = repository.all();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries.front().content, "legacy");
+    EXPECT_FALSE(archived_copy_exists());
+}
+
+// A genuinely foreign database (real tables, but none of ours and no owner marker)
+// is moved aside -- non-destructively -- so CopyClip starts on a clean, owned database.
+TEST_F(SqliteHistoryRepositoryTest, ForeignDatabaseIsArchived) {
+    {
+        SQLite::Database foreign{db_path(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
+        foreign.exec("CREATE TABLE bookmarks (id INTEGER PRIMARY KEY, url TEXT NOT NULL)");
+        foreign.exec("INSERT INTO bookmarks (url) VALUES ('https://example.com')");
+    }
+
+    auto repository = repo();
+    EXPECT_TRUE(repository.all().empty());
+    EXPECT_TRUE(std::filesystem::exists(db_path()));
+
+    // The foreign data survived in the archived copy (archiving is non-destructive).
+    const std::filesystem::path archived = archived_copy_path();
+    ASSERT_FALSE(archived.empty());
+    SQLite::Database moved{archived.string(), SQLite::OPEN_READONLY};
+    EXPECT_EQ(moved.execAndGet("SELECT COUNT(*) FROM bookmarks").getInt(), 1);
+
+    // The fresh database in its place is stamped as ours.
+    SQLite::Database fresh{db_path().string(), SQLite::OPEN_READONLY};
+    EXPECT_EQ(fresh.execAndGet("SELECT value FROM metadata WHERE key = 'owner'").getString(),
+              "copyclip");
+}
+
+// A database explicitly stamped with a different owner is archived and replaced.
+TEST_F(SqliteHistoryRepositoryTest, DatabaseWithWrongOwnerIsArchived) {
+    {
+        SQLite::Database old{db_path(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
+        old.exec("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+        old.exec("INSERT INTO metadata (key, value) VALUES ('owner', 'other-app')");
+    }
+
+    auto repository = repo();
+    EXPECT_TRUE(repository.all().empty());
+    EXPECT_TRUE(archived_copy_exists());
+}
+
+// An empty pre-existing database (no user tables) -- e.g. a sibling instance's file
+// caught mid-initialization -- is adopted, not archived, so a racing first run can't
+// lose its captures.
+TEST_F(SqliteHistoryRepositoryTest, EmptyDatabaseIsAdoptedNotArchived) {
+    { SQLite::Database empty{db_path(), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE}; }
+
+    auto repository = repo();
+    EXPECT_TRUE(repository.all().empty());
+    EXPECT_FALSE(archived_copy_exists());
+}
+
+// A file at the database path that is not a SQLite database is archived aside, so the
+// app starts on a fresh database instead of failing to open on every launch.
+TEST_F(SqliteHistoryRepositoryTest, CorruptFileIsArchivedAndAppStartsFresh) {
+    {
+        std::ofstream out{db_path(), std::ios::binary};
+        out << "this is definitely not a sqlite database";
+    }
+
+    auto repository = repo();
+    EXPECT_TRUE(repository.all().empty());
+    EXPECT_TRUE(archived_copy_exists());
 }
 
 } // namespace
