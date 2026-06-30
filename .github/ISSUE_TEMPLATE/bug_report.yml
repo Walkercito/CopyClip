@@ -1,0 +1,90 @@
+name: Bug report
+description: Something in CopyClip isn't working right
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The distro and session type matter
+        a lot — clipboard behavior differs between X11 and Wayland — so please fill
+        those in even if the rest feels obvious.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I'm on the latest release (or I've noted my version below).
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+      placeholder: When I copy an image and open CopyClip, the window freezes for a second...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps so it can be reproduced.
+      placeholder: |
+        1. Copy ...
+        2. Press the hotkey ...
+        3. Click ...
+        4. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CopyClip version
+      description: The release tag you installed (e.g. v0.2.1), or the commit if you built from source.
+      placeholder: v0.2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: session
+    attributes:
+      label: Display server session
+      options:
+        - X11
+        - Wayland
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distro and version
+      placeholder: Ubuntu 24.04 / Fedora 40 / Arch
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install CopyClip?
+      options:
+        - One-line installer (install.sh)
+        - .deb package
+        - .rpm package
+        - AppImage
+        - Built from source
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop environment (and compositor, if known)
+      placeholder: GNOME 46 (Mutter), KDE Plasma 6, ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Run CopyClip from a terminal with debug logging and paste anything relevant:
+        `SPDLOG_LEVEL=debug copyclip`
+      render: shell

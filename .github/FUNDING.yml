@@ -1,0 +1,16 @@
+# GitHub funding/Sponsor button config.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+# GitHub Sponsors — uncomment once your Sponsors profile is approved
+# (github.com/sponsors). Value is your GitHub username.
+# github: Walkercito
+
+# Ko-fi — the handle from ko-fi.com/<handle>
+ko_fi: walkercito
+
+# Buy Me a Coffee — the handle from buymeacoffee.com/<handle>
+buy_me_a_coffee: walkercito
+
+# Custom links — PayPal and the donate page (crypto). Up to 4 URLs; each is
+# quoted because URLs contain ":".
+custom: ["https://www.paypal.me/KarlaMejiasArian", "https://walkercitodev.vercel.app/donate"]
