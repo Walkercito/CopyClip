@@ -13,6 +13,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 REPO="Walkercito/CopyClip"
 API="https://api.github.com/repos/${REPO}/releases/latest"
+TELEMETRY_ENDPOINT="https://copyclip-eta.vercel.app/api/installed"
 APP="copyclip"
 APP_ID="dev.walkercito.CopyClip"
 USER_BIN="${HOME}/.local/bin"
@@ -100,6 +101,16 @@ EOF
 }
 
 need() { command -v "$1" >/dev/null 2>&1; }
+
+# Anonymous install counter: sends only the event type (install/update/uninstall),
+# never any personal data. Fire-and-forget, bounded timeout, can never fail the run.
+# Honors the cross-tool DO_NOT_TRACK=1 opt-out convention.
+ping_event() {
+  if [ "${DO_NOT_TRACK:-0}" = 1 ]; then return 0; fi
+  need curl || return 0
+  curl -fsS --connect-timeout 2 -m 4 -X POST -H 'Content-Type: application/json' \
+    -d "{\"event\":\"$1\"}" "$TELEMETRY_ENDPOINT" >/dev/null 2>&1 || true
+}
 
 require_tools() {
   need curl || die "curl is required but not installed."
@@ -418,9 +429,9 @@ main() {
   case "$action" in
     install)
       detect_installed
-      if [ -n "$INSTALLED_VIA" ]; then do_update; else do_install; fi
+      if [ -n "$INSTALLED_VIA" ]; then do_update; ping_event update; else do_install; ping_event install; fi
       ;;
-    uninstall) do_uninstall ;;
+    uninstall) do_uninstall; ping_event uninstall ;;
     "")
       detect_installed
       if [ -n "$INSTALLED_VIA" ]; then
@@ -431,12 +442,13 @@ main() {
         read -rsn1 ans </dev/tty 2>/dev/null || ans=""
         printf '%s\n' "$ans"
         case "$ans" in
-          "" | u | U) do_update ;;
-          r | R) do_uninstall ;;
+          "" | u | U) do_update; ping_event update ;;
+          r | R) do_uninstall; ping_event uninstall ;;
           *) note "Cancelled."; printf '\n'; exit 0 ;;
         esac
       else
         do_install
+        ping_event install
       fi
       ;;
   esac
