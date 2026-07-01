@@ -102,14 +102,20 @@ EOF
 
 need() { command -v "$1" >/dev/null 2>&1; }
 
-# Anonymous install counter: sends only the event type (install/update/uninstall),
-# never any personal data. Fire-and-forget, bounded timeout, can never fail the run.
-# Honors the cross-tool DO_NOT_TRACK=1 opt-out convention.
+# Anonymous install counter: sends the event type (install/update/uninstall) and
+# the version(s) involved — install/uninstall carry the version acted on, an update
+# also carries the version it came from. Never any personal data. Fire-and-forget,
+# bounded timeout, can never fail the run. Honors the DO_NOT_TRACK=1 opt-out.
+# Usage: ping_event <event> [version] [from_version]
 ping_event() {
   if [ "${DO_NOT_TRACK:-0}" = 1 ]; then return 0; fi
   need curl || return 0
+  local body="{\"event\":\"$1\""
+  [ -n "${2:-}" ] && body="${body},\"version\":\"$2\""
+  [ -n "${3:-}" ] && body="${body},\"from\":\"$3\""
+  body="${body}}"
   curl -fsS --connect-timeout 2 -m 4 -X POST -H 'Content-Type: application/json' \
-    -d "{\"event\":\"$1\"}" "$TELEMETRY_ENDPOINT" >/dev/null 2>&1 || true
+    -d "$body" "$TELEMETRY_ENDPOINT" >/dev/null 2>&1 || true
 }
 
 require_tools() {
@@ -429,9 +435,13 @@ main() {
   case "$action" in
     install)
       detect_installed
-      if [ -n "$INSTALLED_VIA" ]; then do_update; ping_event update; else do_install; ping_event install; fi
+      if [ -n "$INSTALLED_VIA" ]; then
+        do_update; ping_event update "${RELEASE_TAG#v}" "${INSTALLED_VERSION#v}"
+      else
+        do_install; ping_event install "${RELEASE_TAG#v}"
+      fi
       ;;
-    uninstall) do_uninstall; ping_event uninstall ;;
+    uninstall) do_uninstall; ping_event uninstall "${INSTALLED_VERSION#v}" ;;
     "")
       detect_installed
       if [ -n "$INSTALLED_VIA" ]; then
@@ -442,13 +452,13 @@ main() {
         read -rsn1 ans </dev/tty 2>/dev/null || ans=""
         printf '%s\n' "$ans"
         case "$ans" in
-          "" | u | U) do_update; ping_event update ;;
-          r | R) do_uninstall; ping_event uninstall ;;
+          "" | u | U) do_update; ping_event update "${RELEASE_TAG#v}" "${INSTALLED_VERSION#v}" ;;
+          r | R) do_uninstall; ping_event uninstall "${INSTALLED_VERSION#v}" ;;
           *) note "Cancelled."; printf '\n'; exit 0 ;;
         esac
       else
         do_install
-        ping_event install
+        ping_event install "${RELEASE_TAG#v}"
       fi
       ;;
   esac
