@@ -18,6 +18,10 @@ install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/dev.walkercito.CopyClip.desktop"
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icons/dev.walkercito.CopyClip.svg"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps")
 
+# Monochrome panel/tray icon (recoloured by the shell).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/icons/dev.walkercito.CopyClip-symbolic.svg"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/symbolic/apps")
+
 # --- CPack --------------------------------------------------------------------
 # Version defaults to the project version; the release CI overrides it from the
 # git tag with -DCOPYCLIP_VERSION=<x.y.z>.

@@ -55,6 +55,7 @@ TEST(ModelsTest, SettingsHaveReferenceDefaults) {
     EXPECT_EQ(settings.max_history_items, 70);
     EXPECT_TRUE(settings.auto_hide_on_copy);
     EXPECT_FALSE(settings.auto_paste);
+    EXPECT_TRUE(settings.show_panel_icon);
 }
 
 } // namespace

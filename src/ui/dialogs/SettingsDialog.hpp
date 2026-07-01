@@ -21,10 +21,12 @@ namespace copyclip::ui {
 class SettingsDialog {
 public:
     using ThemeChangedCallback = std::function<void()>;
+    using PanelIconChangedCallback = std::function<void()>;
     using ClosedCallback = std::function<void()>;
 
     SettingsDialog(GtkWidget* parent, core::SettingsService& settings,
-                   ThemeChangedCallback on_theme_changed, ClosedCallback on_closed);
+                   ThemeChangedCallback on_theme_changed,
+                   PanelIconChangedCallback on_panel_icon_changed, ClosedCallback on_closed);
     ~SettingsDialog() = default;
 
     SettingsDialog(const SettingsDialog&) = delete;
@@ -37,6 +39,7 @@ private:
     static void on_shortcut_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_hide_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_paste_toggled(GObject* row, GParamSpec* spec, gpointer self);
+    static void on_panel_icon_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_dialog_closed(AdwDialog* dialog, gpointer self);
 
     void apply_theme(unsigned int index);
@@ -44,9 +47,11 @@ private:
     void apply_shortcut_enabled(bool active);
     void apply_auto_hide(bool active);
     void apply_auto_paste(bool active);
+    void apply_panel_icon(bool active);
 
     std::reference_wrapper<core::SettingsService> settings_;
     ThemeChangedCallback on_theme_changed_;
+    PanelIconChangedCallback on_panel_icon_changed_;
     ClosedCallback on_closed_;
     std::unique_ptr<ShortcutChooser> shortcut_chooser_;
 };

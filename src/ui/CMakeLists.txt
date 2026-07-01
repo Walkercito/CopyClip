@@ -27,6 +27,7 @@ add_library(
   Application.cpp
   GdkClipboardSource.cpp
   GnomeShortcut.cpp
+  StatusNotifierItem.cpp
   KeystrokePaster.cpp
   CopyAction.cpp
   widgets/ClipCard.cpp

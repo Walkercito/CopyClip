@@ -15,6 +15,7 @@
 #include "core/SettingsService.hpp"
 #include "ui/CopyAction.hpp"
 #include "ui/Paster.hpp"
+#include "ui/StatusNotifierItem.hpp"
 #include "ui/dialogs/SettingsDialog.hpp"
 
 #include <adwaita.h>
@@ -48,11 +49,16 @@ public:
     // Show and focus the window if hidden, otherwise hide it (global-shortcut
     // relaunch toggles visibility).
     void toggle();
+    // Show and focus the window (used by the panel icon's "Open"; also the show
+    // half of toggle()).
+    void present();
     // The underlying window widget, for parenting dialogs.
     [[nodiscard]] GtkWidget* native() const;
 
 private:
     void build_ui(GtkApplication* application);
+    // Create or drop the panel icon to match the show_panel_icon setting.
+    void refresh_tray();
     void schedule_refresh();
     void rebuild_cards();
     void apply_filter();
@@ -65,6 +71,7 @@ private:
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::SettingsService> settings_;
     CopyAction copy_action_;
+    GtkApplication* application_ = nullptr; // borrowed, for the tray "Quit"
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
@@ -79,6 +86,7 @@ private:
     Gtk::Label* empty_title_ = nullptr;
     Gtk::Label* empty_description_ = nullptr;
     std::unique_ptr<SettingsDialog> settings_dialog_;
+    std::unique_ptr<StatusNotifierItem> tray_;
     core::HistoryService::Subscription history_subscription_;
 };
 

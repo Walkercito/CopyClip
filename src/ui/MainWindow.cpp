@@ -82,11 +82,13 @@ void trim_heap() {
 MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
                        core::SettingsService& settings, core::ClipboardSource& clipboard,
                        Paster& paster)
-    : history_{history}, settings_{settings}, copy_action_{clipboard, history, settings, paster} {
+    : history_{history}, settings_{settings}, copy_action_{clipboard, history, settings, paster},
+      application_{application} {
     build_ui(application);
     history_subscription_ = history_.get().subscribe([this] { schedule_refresh(); });
     apply_theme(settings.settings().theme);
     rebuild_cards();
+    refresh_tray();
 }
 
 MainWindow::~MainWindow() {
@@ -346,7 +348,7 @@ void MainWindow::open_settings() {
     }
     settings_dialog_ = std::make_unique<SettingsDialog>(
         GTK_WIDGET(window_), settings_.get(),
-        [this] { apply_theme(settings_.get().settings().theme); },
+        [this] { apply_theme(settings_.get().settings().theme); }, [this] { refresh_tray(); },
         // On close, drop the wrapper (on idle, not mid-signal) so it can reopen.
         [this] { Glib::signal_idle().connect_once([this] { settings_dialog_.reset(); }); });
 }
@@ -371,6 +373,10 @@ void MainWindow::toggle() {
         gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
         return;
     }
+    present();
+}
+
+void MainWindow::present() {
     gtk_window_present(GTK_WINDOW(window_));
     // Start on the search field (type to filter); never leave a header button
     // showing the focus ring.
@@ -378,6 +384,21 @@ void MainWindow::toggle() {
         search_->grab_focus();
     } else {
         gtk_window_set_focus(GTK_WINDOW(window_), nullptr);
+    }
+}
+
+void MainWindow::refresh_tray() {
+    const bool wanted = settings_.get().settings().show_panel_icon;
+    if (wanted && !tray_) {
+        tray_ = std::make_unique<StatusNotifierItem>(
+            std::string{kPanelIconName}, [this] { present(); },
+            [this] {
+                present();
+                open_settings();
+            },
+            [this] { g_application_quit(G_APPLICATION(application_)); });
+    } else if (!wanted && tray_) {
+        tray_.reset();
     }
 }
 

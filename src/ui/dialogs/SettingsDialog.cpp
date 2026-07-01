@@ -61,9 +61,11 @@ void fill_combo(AdwComboRow* row, const std::vector<std::string>& options, unsig
 } // namespace
 
 SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& settings,
-                               ThemeChangedCallback on_theme_changed, ClosedCallback on_closed)
+                               ThemeChangedCallback on_theme_changed,
+                               PanelIconChangedCallback on_panel_icon_changed,
+                               ClosedCallback on_closed)
     : settings_{settings}, on_theme_changed_{std::move(on_theme_changed)},
-      on_closed_{std::move(on_closed)} {
+      on_panel_icon_changed_{std::move(on_panel_icon_changed)}, on_closed_{std::move(on_closed)} {
     const core::Settings& current = settings.settings();
 
     // A plain AdwDialog (not AdwPreferencesDialog) so it presents as a bottom sheet
@@ -116,6 +118,16 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     adw_preferences_group_add(behaviour_group, GTK_WIDGET(auto_paste_row));
     g_signal_connect(auto_paste_row, "notify::active",
                      G_CALLBACK(&SettingsDialog::on_auto_paste_toggled), this);
+
+    auto* panel_icon_row = ADW_SWITCH_ROW(adw_switch_row_new());
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(panel_icon_row), "Show panel icon");
+    gtk_widget_set_tooltip_text(
+        GTK_WIDGET(panel_icon_row),
+        "Show a panel icon to open CopyClip (needs a tray/AppIndicator host)");
+    adw_switch_row_set_active(panel_icon_row, static_cast<gboolean>(current.show_panel_icon));
+    adw_preferences_group_add(behaviour_group, GTK_WIDGET(panel_icon_row));
+    g_signal_connect(panel_icon_row, "notify::active",
+                     G_CALLBACK(&SettingsDialog::on_panel_icon_toggled), this);
 
     GtkWidget* toolbar = adw_toolbar_view_new();
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
@@ -187,6 +199,18 @@ void SettingsDialog::apply_auto_paste(bool active) {
     core::Settings updated = settings_.get().settings();
     updated.auto_paste = active;
     settings_.get().update(updated);
+}
+
+void SettingsDialog::on_panel_icon_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
+    static_cast<SettingsDialog*>(self)->apply_panel_icon(
+        adw_switch_row_get_active(ADW_SWITCH_ROW(row)) != FALSE);
+}
+
+void SettingsDialog::apply_panel_icon(bool active) {
+    core::Settings updated = settings_.get().settings();
+    updated.show_panel_icon = active;
+    settings_.get().update(updated);
+    on_panel_icon_changed_(); // let the window add/remove the tray icon live
 }
 
 } // namespace copyclip::ui

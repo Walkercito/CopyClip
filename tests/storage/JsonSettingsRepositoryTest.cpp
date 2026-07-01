@@ -37,6 +37,7 @@ void expect_settings_eq(const core::Settings& actual, const core::Settings& expe
     EXPECT_EQ(actual.max_history_items, expected.max_history_items);
     EXPECT_EQ(actual.auto_hide_on_copy, expected.auto_hide_on_copy);
     EXPECT_EQ(actual.auto_paste, expected.auto_paste);
+    EXPECT_EQ(actual.show_panel_icon, expected.show_panel_icon);
 }
 
 // Write `text` verbatim to `path`, seeding a corrupt or hand-crafted file.
@@ -75,7 +76,8 @@ TEST_F(JsonSettingsRepositoryTest, SaveThenLoadRoundtrip) {
                                .first_run_completed = true,
                                .max_history_items = config::kDefaultMaxHistoryItems,
                                .auto_hide_on_copy = true,
-                               .auto_paste = true};
+                               .auto_paste = true,
+                               .show_panel_icon = false};
     repo().save(saved);
 
     const core::Settings loaded = storage::JsonSettingsRepository{settings_path()}.load();

@@ -11,6 +11,10 @@ namespace copyclip::ui {
 // Reverse-DNS application id (D-Bus name, .desktop, single-instance identity).
 inline constexpr std::string_view kApplicationId{"dev.walkercito.CopyClip"};
 
+// Symbolic (monochrome, transparent) icon for the panel/tray item, so the shell
+// recolours it to the panel foreground. Installed under hicolor/symbolic/apps.
+inline constexpr std::string_view kPanelIconName{"dev.walkercito.CopyClip-symbolic"};
+
 inline constexpr int kWindowDefaultWidth = 420;
 inline constexpr int kWindowDefaultHeight = 640;
 inline constexpr int kWindowMinWidth = 360;
