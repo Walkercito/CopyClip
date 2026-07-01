@@ -19,6 +19,7 @@ APP_ID="dev.walkercito.CopyClip"
 USER_BIN="${HOME}/.local/bin"
 USER_APPS="${HOME}/.local/share/applications"
 USER_ICONS="${HOME}/.local/share/icons/hicolor/scalable/apps"
+USER_ICONS_SYMBOLIC="${HOME}/.local/share/icons/hicolor/symbolic/apps"
 AUTOSTART_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/autostart"
 AUTOSTART_FILE="${AUTOSTART_DIR}/${APP_ID}.desktop"
 
@@ -210,11 +211,28 @@ EOF
 
 disable_autostart() { rm -f "$AUTOSTART_FILE"; }
 
+# Every user-dir file an AppImage install creates, so install/purge/uninstall stay
+# in sync and none is ever orphaned. Keep this the single source of truth.
+appimage_files() {
+  printf '%s\n' \
+    "${USER_BIN}/${APP}" \
+    "${USER_APPS}/${APP_ID}.desktop" \
+    "${USER_ICONS}/${APP_ID}.svg" \
+    "${USER_ICONS_SYMBOLIC}/${APP_ID}-symbolic.svg"
+}
+
+# Refresh the user icon cache so added/removed icons resolve without a re-login.
+refresh_icon_cache() {
+  need gtk-update-icon-cache &&
+    gtk-update-icon-cache -qtf "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
+}
+
 # Remove a previous user-level AppImage install so it can't shadow a package one.
 purge_appimage_files() {
   if [ -e "${USER_BIN}/${APP}" ] || [ -e "${USER_APPS}/${APP_ID}.desktop" ]; then
-    rm -f "${USER_BIN}/${APP}" "${USER_APPS}/${APP_ID}.desktop" "${USER_ICONS}/${APP_ID}.svg"
+    appimage_files | xargs -r rm -f
     need update-desktop-database && update-desktop-database -q "$USER_APPS" 2>/dev/null || true
+    refresh_icon_cache
     note "Removed a previous AppImage install to avoid a conflict."
   fi
 }
@@ -250,16 +268,23 @@ install_rpm() {
 install_appimage() {
   local url; url="$(asset_url "-${ARCH}.AppImage")"
   [ -n "$url" ] || return 1
-  mkdir -p "$USER_BIN" "$USER_APPS" "$USER_ICONS"
+  mkdir -p "$USER_BIN" "$USER_APPS" "$USER_ICONS" "$USER_ICONS_SYMBOLIC"
   local f="${USER_BIN}/${APP}"
   run_step "Downloading $(basename "$url")" curl -fsSL -o "$f" "$url" || die "Download failed."
   chmod +x "$f"
 
-  # Pull the bundled icon out of the AppImage for the menu entry (best-effort).
-  ( cd "$TMP" && "$f" --appimage-extract \
-      "usr/share/icons/hicolor/scalable/apps/${APP_ID}.svg" >/dev/null 2>&1 ) || true
-  local icon="${TMP}/squashfs-root/usr/share/icons/hicolor/scalable/apps/${APP_ID}.svg"
-  [ -f "$icon" ] && cp "$icon" "${USER_ICONS}/${APP_ID}.svg"
+  # Pull the bundled icons out of the AppImage (best-effort): the app icon for the
+  # menu entry, and the symbolic icon for the panel/tray. Refresh the cache so both
+  # resolve without a re-login.
+  local hi="usr/share/icons/hicolor"
+  ( cd "$TMP" && "$f" --appimage-extract "${hi}/scalable/apps/${APP_ID}.svg" >/dev/null 2>&1 ) || true
+  ( cd "$TMP" && "$f" --appimage-extract "${hi}/symbolic/apps/${APP_ID}-symbolic.svg" >/dev/null 2>&1 ) || true
+  local root="${TMP}/squashfs-root/${hi}"
+  [ -f "${root}/scalable/apps/${APP_ID}.svg" ] &&
+    cp "${root}/scalable/apps/${APP_ID}.svg" "${USER_ICONS}/${APP_ID}.svg"
+  [ -f "${root}/symbolic/apps/${APP_ID}-symbolic.svg" ] &&
+    cp "${root}/symbolic/apps/${APP_ID}-symbolic.svg" "${USER_ICONS_SYMBOLIC}/${APP_ID}-symbolic.svg"
+  refresh_icon_cache
 
   cat > "${USER_APPS}/${APP_ID}.desktop" <<EOF
 [Desktop Entry]
@@ -402,8 +427,9 @@ do_uninstall() {
       fi
       ;;
     appimage)
-      rm -f "${USER_BIN}/${APP}" "${USER_APPS}/${APP_ID}.desktop" "${USER_ICONS}/${APP_ID}.svg"
+      appimage_files | xargs -r rm -f
       need update-desktop-database && update-desktop-database -q "$USER_APPS" 2>/dev/null || true
+      refresh_icon_cache
       tick "Removed AppImage and menu entry"
       ;;
   esac
