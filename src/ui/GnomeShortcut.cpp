@@ -82,8 +82,8 @@ std::string executable_path() {
     return error ? std::string{} : exe.string();
 }
 
-bool register_gnome_shortcut(const std::string& command, core::HotkeyPreset preset) {
-    if (command.empty() || !gsettings_available()) {
+bool register_gnome_shortcut(const std::string& command, const std::string& accelerator) {
+    if (command.empty() || accelerator.empty() || !gsettings_available()) {
         return false;
     }
     std::vector<std::string> paths = custom_keybinding_paths();
@@ -97,9 +97,7 @@ bool register_gnome_shortcut(const std::string& command, core::HotkeyPreset pres
         run_gsettings({"set", binding_schema, "name", as_gvariant_string(kShortcutName)},
                       nullptr) &&
         run_gsettings({"set", binding_schema, "command", as_gvariant_string(command)}, nullptr) &&
-        run_gsettings(
-            {"set", binding_schema, "binding", as_gvariant_string(accelerator_for(preset))},
-            nullptr);
+        run_gsettings({"set", binding_schema, "binding", as_gvariant_string(accelerator)}, nullptr);
     if (!ok) {
         // A half-written entry (path listed but name/command/binding unset) would
         // read as "registered" while doing nothing — roll the whole thing back.

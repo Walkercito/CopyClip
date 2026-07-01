@@ -5,6 +5,7 @@
 // exact, kDefaultPreset is SuperV, and the catalog exposes all four presets.
 
 #include "core/Hotkeys.hpp"
+#include "config/Constants.hpp"
 #include "core/Enums.hpp"
 #include "core/Models.hpp"
 
@@ -17,6 +18,7 @@
 namespace {
 
 namespace core = copyclip::core;
+namespace config = copyclip::config;
 
 // The closed set of presets under test, mirroring iteration over the Python
 // HotkeyPreset enum. Declared once so the cases stay DRY.
@@ -84,6 +86,24 @@ TEST(HotkeysTest, AllPresetsReturnsFullCatalog) {
         EXPECT_EQ(found->second.modifiers, direct.modifiers);
         EXPECT_EQ(found->second.key, direct.key);
     }
+}
+
+// Each preset maps to its exact GNOME accelerator string (the form gsettings and
+// the capture UI agree on).
+TEST(HotkeysTest, AcceleratorForMapsEveryPreset) {
+    EXPECT_EQ(core::accelerator_for(core::HotkeyPreset::SuperV), "<Super>v");
+    EXPECT_EQ(core::accelerator_for(core::HotkeyPreset::CtrlAltV), "<Control><Alt>v");
+    EXPECT_EQ(core::accelerator_for(core::HotkeyPreset::SuperC), "<Super>c");
+    EXPECT_EQ(core::accelerator_for(core::HotkeyPreset::CtrlShiftV), "<Control><Shift>v");
+}
+
+// accelerator_from_stored migrates legacy preset tokens, passes a raw accelerator
+// through unchanged, and falls back to the default for an empty value.
+TEST(HotkeysTest, AcceleratorFromStoredHandlesLegacyCustomAndEmpty) {
+    EXPECT_EQ(core::accelerator_from_stored("super_v"), "<Super>v");
+    EXPECT_EQ(core::accelerator_from_stored("ctrl_shift_v"), "<Control><Shift>v");
+    EXPECT_EQ(core::accelerator_from_stored("<Primary>grave"), "<Primary>grave");
+    EXPECT_EQ(core::accelerator_from_stored(""), config::kDefaultHotkeyAccelerator);
 }
 
 } // namespace

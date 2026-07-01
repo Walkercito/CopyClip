@@ -30,6 +30,7 @@ add_library(
   KeystrokePaster.cpp
   CopyAction.cpp
   widgets/ClipCard.cpp
+  widgets/ShortcutChooser.cpp
   dialogs/SettingsDialog.cpp
   dialogs/FirstRunDialog.cpp)
 add_library(copyclip::ui ALIAS copyclip_ui)

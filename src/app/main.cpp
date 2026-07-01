@@ -49,8 +49,12 @@ int main(int argc, char** argv) {
         core::HistoryService history{history_repo, clock, settings.settings().max_history_items};
 
         const std::unique_ptr<core::ClipboardSource> clipboard = adapters::build_clipboard_source();
+        // ponytail: this headless engine is dev-only (UI pending) and grabs via a
+        // closed-enum HotkeySpec, which can't express a free-form accelerator, so
+        // it uses the default preset. The shipped GTK app honours the user's custom
+        // shortcut through GNOME's settings-daemon instead.
         const std::unique_ptr<core::HotkeyListener> listener = adapters::select_hotkey_listener(
-            core::detect_session(), core::get_spec(settings.settings().hotkey), "copyclip-show-ui");
+            core::detect_session(), core::get_spec(core::kDefaultPreset), "copyclip-show-ui");
 
         // Declared last so it is destroyed first: the clipboard, listener,
         // history, and settings it references all outlive it.

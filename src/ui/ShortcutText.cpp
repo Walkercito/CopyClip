@@ -2,50 +2,21 @@
 
 #include "core/Hotkeys.hpp"
 
+#include <cstddef>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 namespace copyclip::ui {
 
-std::vector<std::string> hotkey_display_names() {
-    std::vector<std::string> names;
+std::vector<QuickPick> quick_picks() {
+    std::vector<QuickPick> picks;
     for (const std::pair<core::HotkeyPreset, core::HotkeySpec>& entry : core::all_presets()) {
-        names.push_back(entry.second.display_name());
+        picks.push_back({.label = entry.second.display_name(),
+                         .accelerator = core::accelerator_for(entry.first)});
     }
-    return names;
-}
-
-unsigned int index_of_preset(core::HotkeyPreset preset) {
-    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
-        core::all_presets();
-    for (unsigned int i = 0; i < presets.size(); ++i) {
-        if (presets.at(i).first == preset) {
-            return i;
-        }
-    }
-    return 0;
-}
-
-std::optional<core::HotkeyPreset> preset_at(unsigned int index) {
-    const std::vector<std::pair<core::HotkeyPreset, core::HotkeySpec>> presets =
-        core::all_presets();
-    if (index >= presets.size()) {
-        return std::nullopt;
-    }
-    return presets.at(index).first;
-}
-
-std::string accelerator_for(core::HotkeyPreset preset) {
-    switch (preset) {
-    case core::HotkeyPreset::SuperV:
-        return "<Super>v";
-    case core::HotkeyPreset::CtrlAltV:
-        return "<Control><Alt>v";
-    case core::HotkeyPreset::SuperC:
-        return "<Super>c";
-    case core::HotkeyPreset::CtrlShiftV:
-        return "<Control><Shift>v";
-    }
-    return "<Super>v";
+    return picks;
 }
 
 std::vector<std::string> parse_keybinding_paths(std::string_view list) {

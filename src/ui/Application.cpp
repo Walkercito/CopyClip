@@ -73,9 +73,9 @@ void Application::on_activate() {
             if (settings_.get().is_first_run()) {
                 first_run_dialog_ = std::make_unique<FirstRunDialog>(
                     window_->native(), settings_.get().settings().hotkey,
-                    [this](core::HotkeyPreset hotkey) {
-                        settings_.get().complete_first_run(hotkey);
-                        register_gnome_shortcut(executable_path(), hotkey);
+                    [this](const std::string& accelerator) {
+                        settings_.get().complete_first_run(accelerator);
+                        register_gnome_shortcut(executable_path(), accelerator);
                     });
             } else if (is_gnome_shortcut_registered()) {
                 register_gnome_shortcut(executable_path(), settings_.get().settings().hotkey);

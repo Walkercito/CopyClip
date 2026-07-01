@@ -4,14 +4,13 @@
 #include "core/Models.hpp"
 #include "ui/Constants.hpp"
 #include "ui/GnomeShortcut.hpp"
-#include "ui/ShortcutText.hpp"
 
 #include <adwaita.h>
 
 #include <spdlog/spdlog.h>
 
 #include <array>
-#include <optional>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -93,11 +92,10 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     g_signal_connect(shortcut_enabled_row, "notify::active",
                      G_CALLBACK(&SettingsDialog::on_shortcut_toggled), this);
 
-    AdwComboRow* hotkey_row = add_combo_row(shortcut_group, "Open CopyClip");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(hotkey_row), "Key combination that summons the window");
-    fill_combo(hotkey_row, hotkey_display_names(), index_of_preset(current.hotkey));
-    g_signal_connect(hotkey_row, "notify::selected",
-                     G_CALLBACK(&SettingsDialog::on_hotkey_selected), this);
+    // Free-form shortcut capture plus preset quick-picks; applies on change.
+    shortcut_chooser_ = std::make_unique<ShortcutChooser>(
+        parent, shortcut_group, current.hotkey,
+        [this](const std::string& accelerator) { apply_accelerator(accelerator); });
 
     AdwPreferencesGroup* behaviour_group = add_group(page, "Behaviour");
 
@@ -135,11 +133,6 @@ void SettingsDialog::on_theme_selected(GObject* row, GParamSpec* /*spec*/, gpoin
     static_cast<SettingsDialog*>(self)->apply_theme(adw_combo_row_get_selected(ADW_COMBO_ROW(row)));
 }
 
-void SettingsDialog::on_hotkey_selected(GObject* row, GParamSpec* /*spec*/, gpointer self) {
-    static_cast<SettingsDialog*>(self)->apply_hotkey(
-        adw_combo_row_get_selected(ADW_COMBO_ROW(row)));
-}
-
 void SettingsDialog::on_shortcut_toggled(GObject* row, GParamSpec* /*spec*/, gpointer self) {
     static_cast<SettingsDialog*>(self)->apply_shortcut_enabled(
         adw_switch_row_get_active(ADW_SWITCH_ROW(row)) != FALSE);
@@ -160,13 +153,9 @@ void SettingsDialog::apply_theme(unsigned int index) {
     on_theme_changed_();
 }
 
-void SettingsDialog::apply_hotkey(unsigned int index) {
-    const std::optional<core::HotkeyPreset> preset = preset_at(index);
-    if (!preset.has_value()) {
-        return;
-    }
+void SettingsDialog::apply_accelerator(const std::string& accelerator) {
     core::Settings updated = settings_.get().settings();
-    updated.hotkey = *preset;
+    updated.hotkey = accelerator;
     settings_.get().update(updated);
     // Only refresh the binding if the shortcut is currently enabled.
     if (is_gnome_shortcut_registered()) {

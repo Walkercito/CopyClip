@@ -1,12 +1,10 @@
 #include "ui/dialogs/FirstRunDialog.hpp"
 
 #include "ui/Constants.hpp"
-#include "ui/ShortcutText.hpp"
 
-#include <optional>
+#include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace copyclip::ui {
 
@@ -16,9 +14,9 @@ constexpr int kContentSpacing = 12;
 
 } // namespace
 
-FirstRunDialog::FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial,
+FirstRunDialog::FirstRunDialog(GtkWidget* parent, std::string initial_accelerator,
                                FinishedCallback on_finished)
-    : on_finished_{std::move(on_finished)}, hotkey_row_{ADW_COMBO_ROW(adw_combo_row_new())},
+    : on_finished_{std::move(on_finished)}, accelerator_{std::move(initial_accelerator)},
       dialog_{adw_dialog_new()} {
     adw_dialog_set_title(dialog_, "Welcome");
     adw_dialog_set_content_width(dialog_, kDialogContentWidth);
@@ -36,16 +34,12 @@ FirstRunDialog::FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial,
     GtkWidget* content = gtk_box_new(GTK_ORIENTATION_VERTICAL, kContentSpacing);
 
     GtkWidget* group = adw_preferences_group_new();
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(hotkey_row_), "Open shortcut");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(hotkey_row_), "Press these keys to open CopyClip");
-    GtkStringList* model = gtk_string_list_new(nullptr);
-    for (const std::string& name : hotkey_display_names()) {
-        gtk_string_list_append(model, name.c_str());
-    }
-    adw_combo_row_set_model(hotkey_row_, G_LIST_MODEL(model));
-    g_object_unref(model);
-    adw_combo_row_set_selected(hotkey_row_, index_of_preset(initial));
-    adw_preferences_group_add(ADW_PREFERENCES_GROUP(group), GTK_WIDGET(hotkey_row_));
+    adw_preferences_group_set_title(ADW_PREFERENCES_GROUP(group), "Open shortcut");
+    // The chooser presents its capture sheet on the same window, over the welcome
+    // dialog. Its callback tracks the chosen accelerator for finish().
+    chooser_ = std::make_unique<ShortcutChooser>(
+        parent, ADW_PREFERENCES_GROUP(group), accelerator_,
+        [this](const std::string& accelerator) { accelerator_ = accelerator; });
     gtk_box_append(GTK_BOX(content), group);
 
     GtkWidget* button = gtk_button_new_with_label("Get Started");
@@ -73,11 +67,7 @@ void FirstRunDialog::on_closed(AdwDialog* /*dialog*/, gpointer self) {
 }
 
 void FirstRunDialog::finish() {
-    const std::optional<core::HotkeyPreset> preset =
-        preset_at(adw_combo_row_get_selected(hotkey_row_));
-    if (preset.has_value()) {
-        on_finished_(*preset);
-    }
+    on_finished_(accelerator_);
 }
 
 } // namespace copyclip::ui

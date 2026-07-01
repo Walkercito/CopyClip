@@ -8,10 +8,13 @@
 // rows are driven through its C API.
 
 #include "core/SettingsService.hpp"
+#include "ui/widgets/ShortcutChooser.hpp"
 
 #include <adwaita.h>
 
 #include <functional>
+#include <memory>
+#include <string>
 
 namespace copyclip::ui {
 
@@ -31,14 +34,13 @@ public:
 
 private:
     static void on_theme_selected(GObject* row, GParamSpec* spec, gpointer self);
-    static void on_hotkey_selected(GObject* row, GParamSpec* spec, gpointer self);
     static void on_shortcut_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_hide_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_auto_paste_toggled(GObject* row, GParamSpec* spec, gpointer self);
     static void on_dialog_closed(AdwDialog* dialog, gpointer self);
 
     void apply_theme(unsigned int index);
-    void apply_hotkey(unsigned int index);
+    void apply_accelerator(const std::string& accelerator);
     void apply_shortcut_enabled(bool active);
     void apply_auto_hide(bool active);
     void apply_auto_paste(bool active);
@@ -46,6 +48,7 @@ private:
     std::reference_wrapper<core::SettingsService> settings_;
     ThemeChangedCallback on_theme_changed_;
     ClosedCallback on_closed_;
+    std::unique_ptr<ShortcutChooser> shortcut_chooser_;
 };
 
 } // namespace copyclip::ui

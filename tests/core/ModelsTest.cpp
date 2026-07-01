@@ -49,7 +49,7 @@ TEST(ModelsTest, DisplayNameUppercasesMultiCharacterKey) {
 TEST(ModelsTest, SettingsHaveReferenceDefaults) {
     const core::Settings settings{};
     EXPECT_EQ(settings.theme, core::Theme::Dark);
-    EXPECT_EQ(settings.hotkey, core::HotkeyPreset::SuperV);
+    EXPECT_EQ(settings.hotkey, config::kDefaultHotkeyAccelerator);
     EXPECT_FALSE(settings.first_run_completed);
     EXPECT_EQ(settings.max_history_items, config::kDefaultMaxHistoryItems);
     EXPECT_EQ(settings.max_history_items, 70);

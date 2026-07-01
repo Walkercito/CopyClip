@@ -8,7 +8,6 @@
 
 namespace {
 
-using copyclip::core::HotkeyPreset;
 using copyclip::core::Settings;
 using copyclip::core::SettingsService;
 using copyclip::core::Theme;
@@ -41,10 +40,10 @@ TEST(SettingsServiceTest, FirstRunLifecycle) {
 
     EXPECT_TRUE(service.is_first_run());
 
-    service.complete_first_run(HotkeyPreset::SuperC);
+    service.complete_first_run("<Super>c");
 
     EXPECT_FALSE(service.is_first_run());
-    EXPECT_EQ(service.settings().hotkey, HotkeyPreset::SuperC);
+    EXPECT_EQ(service.settings().hotkey, "<Super>c");
     EXPECT_TRUE(repository.load().first_run_completed);
 }
 

@@ -2,36 +2,27 @@
 
 #include <gtest/gtest.h>
 
-#include <optional>
 #include <string>
 #include <vector>
 
 namespace {
 
-using copyclip::core::HotkeyPreset;
-using copyclip::ui::accelerator_for;
 using copyclip::ui::build_keybinding_array;
-using copyclip::ui::hotkey_display_names;
-using copyclip::ui::index_of_preset;
 using copyclip::ui::parse_keybinding_paths;
-using copyclip::ui::preset_at;
+using copyclip::ui::quick_picks;
+using copyclip::ui::QuickPick;
 
-TEST(ShortcutTextTest, MapsPresetsToGnomeAccelerators) {
-    EXPECT_EQ(accelerator_for(HotkeyPreset::SuperV), "<Super>v");
-    EXPECT_EQ(accelerator_for(HotkeyPreset::CtrlAltV), "<Control><Alt>v");
-    EXPECT_EQ(accelerator_for(HotkeyPreset::SuperC), "<Super>c");
-    EXPECT_EQ(accelerator_for(HotkeyPreset::CtrlShiftV), "<Control><Shift>v");
-}
-
-TEST(ShortcutTextTest, HotkeyPresetIndexRoundTrips) {
-    const std::vector<std::string> names = hotkey_display_names();
-    ASSERT_FALSE(names.empty());
-    for (unsigned int i = 0; i < names.size(); ++i) {
-        const std::optional<HotkeyPreset> preset = preset_at(i);
-        ASSERT_TRUE(preset.has_value());
-        EXPECT_EQ(index_of_preset(*preset), i);
+// quick_picks() surfaces the presets as label/accelerator pairs for the capture
+// UI's one-tap buttons; Super+V leads, and none is blank.
+TEST(ShortcutTextTest, QuickPicksExposePresetLabelsAndAccelerators) {
+    const std::vector<QuickPick> picks = quick_picks();
+    ASSERT_FALSE(picks.empty());
+    EXPECT_EQ(picks.front().label, "Super+V");
+    EXPECT_EQ(picks.front().accelerator, "<Super>v");
+    for (const QuickPick& pick : picks) {
+        EXPECT_FALSE(pick.label.empty());
+        EXPECT_FALSE(pick.accelerator.empty());
     }
-    EXPECT_FALSE(preset_at(static_cast<unsigned int>(names.size())).has_value());
 }
 
 TEST(ShortcutTextTest, ParsesEntries) {

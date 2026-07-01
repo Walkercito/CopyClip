@@ -14,6 +14,7 @@
 #include "core/Models.hpp"
 
 #include <functional>
+#include <string>
 
 namespace copyclip::core {
 
@@ -30,8 +31,9 @@ public:
 
     [[nodiscard]] bool is_first_run() const;
 
-    // Record the chosen hotkey and mark the first run complete (persisted).
-    void complete_first_run(HotkeyPreset hotkey);
+    // Record the chosen shortcut (a GNOME accelerator) and mark the first run
+    // complete (persisted).
+    void complete_first_run(const std::string& accelerator);
 
 private:
     std::reference_wrapper<SettingsRepository> repository_;

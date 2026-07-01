@@ -1,12 +1,15 @@
 #include "core/Hotkeys.hpp"
 
+#include "config/Constants.hpp"
 #include "core/Enums.hpp"
 #include "core/Models.hpp"
 
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -47,6 +50,30 @@ HotkeySpec get_spec(HotkeyPreset preset) {
 std::vector<std::pair<HotkeyPreset, HotkeySpec>> all_presets() {
     const auto& presets = catalog();
     return std::vector<std::pair<HotkeyPreset, HotkeySpec>>{presets.begin(), presets.end()};
+}
+
+std::string accelerator_for(HotkeyPreset preset) {
+    switch (preset) {
+    case HotkeyPreset::SuperV:
+        return "<Super>v";
+    case HotkeyPreset::CtrlAltV:
+        return "<Control><Alt>v";
+    case HotkeyPreset::SuperC:
+        return "<Super>c";
+    case HotkeyPreset::CtrlShiftV:
+        return "<Control><Shift>v";
+    }
+    return std::string{config::kDefaultHotkeyAccelerator};
+}
+
+std::string accelerator_from_stored(std::string_view stored) {
+    if (const std::optional<HotkeyPreset> preset = hotkey_preset_from_string(stored)) {
+        return accelerator_for(*preset);
+    }
+    if (stored.empty()) {
+        return std::string{config::kDefaultHotkeyAccelerator};
+    }
+    return std::string{stored};
 }
 
 } // namespace copyclip::core

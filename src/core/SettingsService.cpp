@@ -18,9 +18,9 @@ bool SettingsService::is_first_run() const {
     return !settings_.first_run_completed;
 }
 
-void SettingsService::complete_first_run(HotkeyPreset hotkey) {
+void SettingsService::complete_first_run(const std::string& accelerator) {
     Settings next = settings_;
-    next.hotkey = hotkey;
+    next.hotkey = accelerator;
     next.first_run_completed = true;
     update(next);
 }

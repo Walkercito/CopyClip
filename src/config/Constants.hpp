@@ -16,6 +16,10 @@ inline constexpr std::string_view kAppId = "copyclip";
 inline constexpr std::string_view kAppVersion = "0.0.0";
 
 inline constexpr int kDefaultMaxHistoryItems = 70;
+
+// Default open shortcut as a GNOME accelerator (matches core::kDefaultPreset,
+// Super+V). Stored verbatim in settings and written straight to gsettings.
+inline constexpr std::string_view kDefaultHotkeyAccelerator = "<Super>v";
 inline constexpr std::string_view kHistoryDbName = "history.db";
 inline constexpr std::string_view kSettingsFileName = "settings.json";
 inline constexpr std::string_view kInstanceSocketName = "copyclip.sock";

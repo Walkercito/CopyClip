@@ -1,22 +1,26 @@
 #pragma once
 
-// One-time welcome dialog: introduces CopyClip and lets the user pick the summon
-// shortcut. On "Get Started" it reports the chosen preset (the caller completes
-// first run and registers the shortcut). Built with the libadwaita C API.
+// One-time welcome dialog: introduces CopyClip and lets the user choose the
+// summon shortcut (free-form capture or a preset). On close it reports the chosen
+// GNOME accelerator; the caller completes first run and registers the shortcut.
+// Built with the libadwaita C API.
 
-#include "core/Enums.hpp"
+#include "ui/widgets/ShortcutChooser.hpp"
 
 #include <adwaita.h>
 
 #include <functional>
+#include <memory>
+#include <string>
 
 namespace copyclip::ui {
 
 class FirstRunDialog {
 public:
-    using FinishedCallback = std::function<void(core::HotkeyPreset)>;
+    using FinishedCallback = std::function<void(const std::string&)>;
 
-    FirstRunDialog(GtkWidget* parent, core::HotkeyPreset initial, FinishedCallback on_finished);
+    FirstRunDialog(GtkWidget* parent, std::string initial_accelerator,
+                   FinishedCallback on_finished);
     ~FirstRunDialog() = default;
 
     FirstRunDialog(const FirstRunDialog&) = delete;
@@ -30,8 +34,9 @@ private:
     void finish();
 
     FinishedCallback on_finished_;
-    AdwComboRow* hotkey_row_;
+    std::string accelerator_;
     AdwDialog* dialog_;
+    std::unique_ptr<ShortcutChooser> chooser_;
 };
 
 } // namespace copyclip::ui

@@ -71,7 +71,7 @@ TEST_F(JsonSettingsRepositoryTest, LoadReturnsDefaultsWhenMissing) {
 // repository instance on the same path.
 TEST_F(JsonSettingsRepositoryTest, SaveThenLoadRoundtrip) {
     const core::Settings saved{.theme = core::Theme::Light,
-                               .hotkey = core::HotkeyPreset::CtrlAltV,
+                               .hotkey = "<Control><Alt>v",
                                .first_run_completed = true,
                                .max_history_items = config::kDefaultMaxHistoryItems,
                                .auto_hide_on_copy = true,
@@ -94,6 +94,20 @@ TEST_F(JsonSettingsRepositoryTest, CorruptedFileFallsBackToDefaults) {
 TEST_F(JsonSettingsRepositoryTest, InvalidEnumValueFallsBackToDefaults) {
     write_text(settings_path(), R"({"theme": "rainbow"})");
     expect_settings_eq(repo().load(), core::Settings{});
+}
+
+// A settings file from an older build stored the hotkey as a preset token;
+// load() migrates it to the equivalent GNOME accelerator.
+TEST_F(JsonSettingsRepositoryTest, MigratesLegacyPresetTokenToAccelerator) {
+    write_text(settings_path(), R"({"hotkey": "super_c"})");
+    EXPECT_EQ(repo().load().hotkey, "<Super>c");
+}
+
+// A current build stores a raw accelerator, including a custom one outside the
+// presets; load() preserves it verbatim.
+TEST_F(JsonSettingsRepositoryTest, PreservesCustomAccelerator) {
+    write_text(settings_path(), R"({"hotkey": "<Primary>grave"})");
+    EXPECT_EQ(repo().load().hotkey, "<Primary>grave");
 }
 
 // Extra (no reference analogue): after a successful save the atomic write's temp

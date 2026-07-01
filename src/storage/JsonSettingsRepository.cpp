@@ -2,6 +2,7 @@
 
 #include "config/Constants.hpp"
 #include "core/Enums.hpp"
+#include "core/Hotkeys.hpp"
 #include "core/Models.hpp"
 
 #include <nlohmann/json.hpp>
@@ -57,17 +58,17 @@ constexpr int kJsonIndent = 2;
     const core::Settings defaults{};
 
     const auto theme_text = json.value(kKeyTheme, std::string{core::to_string(defaults.theme)});
-    const auto hotkey_text = json.value(kKeyHotkey, std::string{core::to_string(defaults.hotkey)});
+    const auto hotkey_text = json.value(kKeyHotkey, defaults.hotkey);
 
     const std::optional<core::Theme> theme = core::theme_from_string(theme_text);
-    const std::optional<core::HotkeyPreset> hotkey = core::hotkey_preset_from_string(hotkey_text);
-    if (!theme || !hotkey) {
+    if (!theme) {
         return std::nullopt;
     }
 
     return core::Settings{
         .theme = *theme,
-        .hotkey = *hotkey,
+        // Accept both legacy preset tokens ("super_v") and raw accelerators.
+        .hotkey = core::accelerator_from_stored(hotkey_text),
         .first_run_completed = json.value(kKeyFirstRunCompleted, defaults.first_run_completed),
         .max_history_items = json.value(kKeyMaxHistoryItems, defaults.max_history_items),
         .auto_hide_on_copy = json.value(kKeyAutoHideOnCopy, defaults.auto_hide_on_copy),
@@ -111,7 +112,7 @@ void JsonSettingsRepository::save(const core::Settings& settings) {
     }
 
     const nlohmann::json json = {{kKeyTheme, core::to_string(settings.theme)},
-                                 {kKeyHotkey, core::to_string(settings.hotkey)},
+                                 {kKeyHotkey, settings.hotkey},
                                  {kKeyFirstRunCompleted, settings.first_run_completed},
                                  {kKeyMaxHistoryItems, settings.max_history_items},
                                  {kKeyAutoHideOnCopy, settings.auto_hide_on_copy},
