@@ -10,11 +10,6 @@ engine, plus the archived PyQt6 UI under `reference/pyqt6-ui/` — is the **vali
 reference**: a working, fully-tested design the C++ port mirrors. It is not the shipping
 target; the port is executed from a separate migration plan.
 
-## Reference implementations — consult before designing clipboard behavior
-
-- **Python reference (this repo)** — the validated design described above; the C++
-  port mirrors it.
-
 ## Non-negotiable principles
 
 - **OOP.** Model behavior as small classes with one clear responsibility and explicit
