@@ -30,6 +30,7 @@ add_library(
   StatusNotifierItem.cpp
   KeystrokePaster.cpp
   CopyAction.cpp
+  KeyAction.cpp
   widgets/ClipCard.cpp
   widgets/ShortcutChooser.cpp
   dialogs/SettingsDialog.cpp
