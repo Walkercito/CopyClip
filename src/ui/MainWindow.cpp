@@ -94,13 +94,12 @@ void trim_heap() {
     return focus != nullptr && gtk_widget_get_ancestor(focus, GTK_TYPE_POPOVER) != nullptr;
 }
 
-// The nearest row before/after `from` in display order that the search filter left
-// visible, or nullptr at the end of the list.
-[[nodiscard]] Gtk::ListBoxRow* visible_sibling(Gtk::Widget& from, bool forward) {
-    for (Gtk::Widget* sibling = forward ? from.get_next_sibling() : from.get_prev_sibling();
-         sibling != nullptr;
-         sibling = forward ? sibling->get_next_sibling() : sibling->get_prev_sibling()) {
-        auto* row = dynamic_cast<Gtk::ListBoxRow*>(sibling);
+// The first row at or after `start`, scanning in display order or against it, that
+// the search filter left visible — or nullptr once the scan runs off the list.
+[[nodiscard]] Gtk::ListBoxRow* visible_row_from(Gtk::Widget* start, bool forward) {
+    for (Gtk::Widget* candidate = start; candidate != nullptr;
+         candidate = forward ? candidate->get_next_sibling() : candidate->get_prev_sibling()) {
+        auto* row = dynamic_cast<Gtk::ListBoxRow*>(candidate);
         if (row != nullptr && row->get_visible()) {
             return row;
         }
@@ -278,6 +277,12 @@ void MainWindow::rebuild_cards() {
     const std::vector<core::ClipboardEntry> entries = history_.get().entries();
     card_count_ = entries.size();
 
+    // Pinning recreates the very card the cursor sits on, taking the selection with
+    // it. Remember what it held so the cursor can be put back below, instead of
+    // apply_filter snapping it to the top of the list.
+    const auto* selected = dynamic_cast<ClipCard*>(list_->get_selected_row());
+    const std::string selected_content = selected != nullptr ? selected->entry().content : "";
+
     // Index the entries we want shown, by their key, for O(1) lookup below.
     std::map<std::string, const core::ClipboardEntry*> wanted;
     for (const core::ClipboardEntry& entry : entries) {
@@ -323,6 +328,12 @@ void MainWindow::rebuild_cards() {
             [this](const core::ClipboardEntry& clip) { pin(clip.content); });
         list_->append(*card);
         cards_.emplace(entry.content, card);
+    }
+
+    // Put the cursor back on the card it was on, recreated or not. Gone for good —
+    // cleared, evicted, filtered out — leaves apply_filter to pick the fallback.
+    if (const auto card = cards_.find(selected_content); card != cards_.end()) {
+        list_->select_row(*card->second);
     }
 
     list_->invalidate_sort();
@@ -420,13 +431,16 @@ bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierTy
 }
 
 void MainWindow::move_selection(bool forward) {
-    Gtk::ListBoxRow* const current = list_->get_selected_row();
-    if (current == nullptr) {
-        return; // nothing matches the search
+    // Ctrl+click reaches GtkListBox as a toggle and leaves the list unselected, so
+    // the cursor can be missing even with matches on screen. Start the scan at the
+    // top then, rather than letting the arrows go dead.
+    Gtk::Widget* start = list_->get_first_child();
+    if (Gtk::ListBoxRow* const current = list_->get_selected_row(); current != nullptr) {
+        start = forward ? current->get_next_sibling() : current->get_prev_sibling();
     }
     // Stop at the ends rather than wrapping: with the list also acting as the
     // paste target, wrapping past the last row invites pasting the wrong clip.
-    if (Gtk::ListBoxRow* const next = visible_sibling(*current, forward); next != nullptr) {
+    if (Gtk::ListBoxRow* const next = visible_row_from(start, forward); next != nullptr) {
         list_->select_row(*next);
         reveal(*next);
     }
