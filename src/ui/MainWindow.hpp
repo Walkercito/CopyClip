@@ -20,10 +20,15 @@
 
 #include <adwaita.h>
 
+#include <gdkmm/enums.h>
+
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/searchentry.h>
 #include <gtkmm/stack.h>
+
+#include <glib.h>
 
 #include <cstddef>
 #include <functional>
@@ -62,6 +67,11 @@ private:
     void schedule_refresh();
     void rebuild_cards();
     void apply_filter();
+    // Paste the row the keyboard navigation landed on — Enter (or double-click)
+    // activates it, taking the same path as a plain click on the card.
+    void on_row_activated(Gtk::ListBoxRow* row);
+    // Escape hides the window; every other key falls through. Returns true when handled.
+    bool on_key_pressed(guint keyval, guint keycode, Gdk::ModifierType state);
     void copy(const core::ClipboardEntry& entry);
     void pin(const std::string& content);
     void clear_history();

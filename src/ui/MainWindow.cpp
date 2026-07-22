@@ -9,8 +9,11 @@
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
+#include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/image.h>
 #include <gtkmm/scrolledwindow.h>
+
+#include <gdk/gdkkeysyms.h>
 
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
@@ -174,6 +177,15 @@ void MainWindow::build_ui(GtkApplication* application) {
     auto* content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
     content->set_margin(kContentMargin);
 
+    // Escape hides the window from anywhere inside it. Capture phase so it is read
+    // before a focused child (e.g. the search entry, which would otherwise just clear
+    // its text) consumes it.
+    auto key_controller = Gtk::EventControllerKey::create();
+    key_controller->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    key_controller->signal_key_pressed().connect(sigc::mem_fun(*this, &MainWindow::on_key_pressed),
+                                                 false);
+    content->add_controller(key_controller);
+
     search_ = Gtk::make_managed<Gtk::SearchEntry>();
     search_->set_placeholder_text("Search clipboard history…");
     search_->signal_search_changed().connect([this] {
@@ -189,6 +201,11 @@ void MainWindow::build_ui(GtkApplication* application) {
     scrolled->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     list_ = Gtk::make_managed<Gtk::ListBox>();
     list_->set_selection_mode(Gtk::SelectionMode::NONE);
+    // Don't activate on a single click — that is ClipCard's own gesture (copy /
+    // Ctrl-pin). Keyboard activation (Enter on the focused row) still fires
+    // row-activated, which pastes the clip the arrow keys landed on.
+    list_->set_activate_on_single_click(false);
+    list_->signal_row_activated().connect(sigc::mem_fun(*this, &MainWindow::on_row_activated));
     list_->add_css_class("background");
     list_->set_valign(Gtk::Align::START);
     // Keep rows ordered so incrementally-added cards land in place (see rebuild_cards).
@@ -313,6 +330,26 @@ void MainWindow::apply_filter() {
         empty_description_->set_text("Nothing matches your search");
     }
     stack_->set_visible_child(kPageEmpty);
+}
+
+bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierType /*state*/) {
+    if (keyval == GDK_KEY_Escape) {
+        gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+        return true;
+    }
+    return false; // everything else falls through (typing, arrow navigation, Enter, …)
+}
+
+void MainWindow::on_row_activated(Gtk::ListBoxRow* row) {
+    auto* card = dynamic_cast<ClipCard*>(row);
+    if (card == nullptr) {
+        return;
+    }
+    // Defer to an idle for the same reason ClipCard does on click: copy() rebuilds the
+    // list, and tearing this row down from inside the activation would corrupt GTK's
+    // state accounting. Capture the entry by value so it outlives the card.
+    const core::ClipboardEntry entry = card->entry();
+    Glib::signal_idle().connect_once([this, entry] { copy(entry); });
 }
 
 void MainWindow::copy(const core::ClipboardEntry& entry) {
