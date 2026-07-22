@@ -4,16 +4,16 @@
 #include "ui/ClipText.hpp"
 #include "ui/Constants.hpp"
 #include "ui/Fuzzy.hpp"
+#include "ui/KeyAction.hpp"
 #include "ui/Theme.hpp"
 #include "ui/widgets/ClipCard.hpp"
 
+#include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/image.h>
 #include <gtkmm/scrolledwindow.h>
-
-#include <gdk/gdkkeysyms.h>
 
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
@@ -80,6 +80,34 @@ void trim_heap() {
     return 0;
 }
 
+// True when a button holds the focus (see KeyAction for why that matters).
+[[nodiscard]] bool button_focused(GtkWindow* window) {
+    GtkWidget* focus = gtk_window_get_focus(window);
+    return focus != nullptr && GTK_IS_BUTTON(focus) != FALSE;
+}
+
+// True while focus sits inside a popover — the search entry's right-click Cut/Copy/
+// Paste menu, or the emoji chooser. Those are not dialogs, so the dialog guard misses
+// them, and they own their own Escape and arrow keys.
+[[nodiscard]] bool popover_focused(GtkWindow* window) {
+    GtkWidget* focus = gtk_window_get_focus(window);
+    return focus != nullptr && gtk_widget_get_ancestor(focus, GTK_TYPE_POPOVER) != nullptr;
+}
+
+// The nearest row before/after `from` in display order that the search filter left
+// visible, or nullptr at the end of the list.
+[[nodiscard]] Gtk::ListBoxRow* visible_sibling(Gtk::Widget& from, bool forward) {
+    for (Gtk::Widget* sibling = forward ? from.get_next_sibling() : from.get_prev_sibling();
+         sibling != nullptr;
+         sibling = forward ? sibling->get_next_sibling() : sibling->get_prev_sibling()) {
+        auto* row = dynamic_cast<Gtk::ListBoxRow*>(sibling);
+        if (row != nullptr && row->get_visible()) {
+            return row;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 MainWindow::MainWindow(GtkApplication* application, core::HistoryService& history,
@@ -109,11 +137,23 @@ void MainWindow::build_ui(GtkApplication* application) {
 
     // Closing hides the window so the app keeps capturing in the background.
     g_signal_connect(window_, "close-request",
-                     G_CALLBACK(+[](GtkWindow* window, gpointer) -> gboolean {
-                         gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
+                     G_CALLBACK(+[](GtkWindow*, gpointer self) -> gboolean {
+                         static_cast<MainWindow*>(self)->hide();
                          return TRUE;
                      }),
-                     nullptr);
+                     this);
+
+    // Escape, Up/Down and Enter are the window's own, wherever focus sits — capture
+    // phase so they are read before the focused child's stock bindings (the search
+    // entry would otherwise swallow Enter, which is the whole bug).
+    auto key_controller = Gtk::EventControllerKey::create();
+    key_controller->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    key_controller->signal_key_pressed().connect(sigc::mem_fun(*this, &MainWindow::on_key_pressed),
+                                                 false);
+    // add_controller takes ownership of a ref, so gobj_copy() mints it — unlike the
+    // plain gobj() handoff used for child widgets below, which would double-unref here.
+    gtk_widget_add_controller(GTK_WIDGET(window_),
+                              GTK_EVENT_CONTROLLER(key_controller->gobj_copy()));
 
     // Trim on every hide — close, copy, and toggle all route through this signal.
     g_signal_connect(window_, "hide", G_CALLBACK(+[](GtkWidget*, gpointer) { trim_heap(); }),
@@ -177,15 +217,6 @@ void MainWindow::build_ui(GtkApplication* application) {
     auto* content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
     content->set_margin(kContentMargin);
 
-    // Escape hides the window from anywhere inside it. Capture phase so it is read
-    // before a focused child (e.g. the search entry, which would otherwise just clear
-    // its text) consumes it.
-    auto key_controller = Gtk::EventControllerKey::create();
-    key_controller->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
-    key_controller->signal_key_pressed().connect(sigc::mem_fun(*this, &MainWindow::on_key_pressed),
-                                                 false);
-    content->add_controller(key_controller);
-
     search_ = Gtk::make_managed<Gtk::SearchEntry>();
     search_->set_placeholder_text("Search clipboard history…");
     search_->signal_search_changed().connect([this] {
@@ -197,22 +228,20 @@ void MainWindow::build_ui(GtkApplication* application) {
     stack_ = Gtk::make_managed<Gtk::Stack>();
     stack_->set_vexpand(true);
 
-    auto* scrolled = Gtk::make_managed<Gtk::ScrolledWindow>();
-    scrolled->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    scrolled_ = Gtk::make_managed<Gtk::ScrolledWindow>();
+    scrolled_->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     list_ = Gtk::make_managed<Gtk::ListBox>();
-    list_->set_selection_mode(Gtk::SelectionMode::NONE);
-    // Don't activate on a single click — that is ClipCard's own gesture (copy /
-    // Ctrl-pin). Keyboard activation (Enter on the focused row) still fires
-    // row-activated, which pastes the clip the arrow keys landed on.
-    list_->set_activate_on_single_click(false);
-    list_->signal_row_activated().connect(sigc::mem_fun(*this, &MainWindow::on_row_activated));
+    // Single selection is the keyboard cursor: apply_filter keeps exactly one match
+    // highlighted, the arrow keys move it, and Enter pastes it. Row activation is
+    // left alone — the mouse is ClipCard's own gesture (copy / Ctrl-pin).
+    list_->set_selection_mode(Gtk::SelectionMode::SINGLE);
     list_->add_css_class("background");
     list_->set_valign(Gtk::Align::START);
     // Keep rows ordered so incrementally-added cards land in place (see rebuild_cards).
     list_->set_sort_func(
         [](Gtk::ListBoxRow* a, Gtk::ListBoxRow* b) { return clip_card_sort(a, b); });
-    scrolled->set_child(*list_);
-    stack_->add(*scrolled, kPageList);
+    scrolled_->set_child(*list_);
+    stack_->add(*scrolled_, kPageList);
 
     auto* empty = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, kContentMargin);
     empty->set_valign(Gtk::Align::CENTER);
@@ -304,6 +333,9 @@ void MainWindow::apply_filter() {
     // The search bar is only useful once there is something to search.
     search_->set_visible(card_count_ > 0);
 
+    const Gtk::ListBoxRow* selected = list_->get_selected_row();
+    ClipCard* first_shown = nullptr;
+    bool selection_shown = false;
     std::size_t visible = 0;
     for (Gtk::Widget* child = list_->get_first_child(); child != nullptr;
          child = child->get_next_sibling()) {
@@ -313,8 +345,26 @@ void MainWindow::apply_filter() {
         }
         const bool shown = matches(card->content());
         card->set_visible(shown);
-        if (shown) {
-            ++visible;
+        if (!shown) {
+            continue;
+        }
+        ++visible;
+        if (first_shown == nullptr) {
+            first_shown = card;
+        }
+        selection_shown = selection_shown || card == selected;
+    }
+
+    // Always leave a row highlighted for Enter to act on. When the filter — or a
+    // rebuild that dropped the card — took the selection away, fall back to the
+    // first match and scroll back up to it: hidden rows get no allocation, so that
+    // row sits at the very top of the list.
+    if (!selection_shown) {
+        if (first_shown != nullptr) {
+            list_->select_row(*first_shown);
+            scrolled_->get_vadjustment()->set_value(0.0);
+        } else {
+            list_->unselect_all();
         }
     }
 
@@ -333,26 +383,83 @@ void MainWindow::apply_filter() {
 }
 
 bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierType /*state*/) {
-    if (keyval == GDK_KEY_Escape) {
-        gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
-        return true;
+    // Settings and first-run are AdwDialogs presented inside this very window, and
+    // menus are popovers in it — while either is up, its own keys must win.
+    if (adw_application_window_get_visible_dialog(window_) != nullptr ||
+        popover_focused(GTK_WINDOW(window_))) {
+        return false;
     }
-    return false; // everything else falls through (typing, arrow navigation, Enter, …)
+    // Read the entry, not search_text_: GtkSearchEntry delays search-changed by
+    // ~150 ms, so the cached copy lags behind text the user just typed — Escape
+    // right after the first keystroke must still read as an active search.
+    // ponytail: an in-progress input-method preedit is not detected, so Enter and
+    // the arrows preempt CJK candidate selection. Filter through Gtk::IMContext if
+    // that ever matters.
+    const KeyContext context{.search_active = !search_->get_text().empty(),
+                             .button_focused = button_focused(GTK_WINDOW(window_))};
+    switch (key_action(keyval, context)) {
+    case KeyAction::ClearSearch:
+        search_->set_text("");
+        return true;
+    case KeyAction::Dismiss:
+        hide();
+        return true;
+    case KeyAction::SelectPrevious:
+        move_selection(false);
+        return true;
+    case KeyAction::SelectNext:
+        move_selection(true);
+        return true;
+    case KeyAction::Paste:
+        return activate_selection();
+    case KeyAction::None:
+        return false;
+    }
+    // No default case, so a new KeyAction trips -Wswitch rather than being ignored.
+    return false;
 }
 
-void MainWindow::on_row_activated(Gtk::ListBoxRow* row) {
-    auto* card = dynamic_cast<ClipCard*>(row);
-    if (card == nullptr) {
-        return;
+void MainWindow::move_selection(bool forward) {
+    Gtk::ListBoxRow* const current = list_->get_selected_row();
+    if (current == nullptr) {
+        return; // nothing matches the search
     }
-    // Defer to an idle for the same reason ClipCard does on click: copy() rebuilds the
-    // list, and tearing this row down from inside the activation would corrupt GTK's
-    // state accounting. Capture the entry by value so it outlives the card.
-    const core::ClipboardEntry entry = card->entry();
-    Glib::signal_idle().connect_once([this, entry] { copy(entry); });
+    // Stop at the ends rather than wrapping: with the list also acting as the
+    // paste target, wrapping past the last row invites pasting the wrong clip.
+    if (Gtk::ListBoxRow* const next = visible_sibling(*current, forward); next != nullptr) {
+        list_->select_row(*next);
+        reveal(*next);
+    }
+}
+
+bool MainWindow::activate_selection() {
+    auto* card = dynamic_cast<ClipCard*>(list_->get_selected_row());
+    if (card == nullptr) {
+        return false;
+    }
+    // Straight through, unlike ClipCard's click: the rebuild copy() sets off is
+    // itself deferred (see schedule_refresh), so no widget dies under this dispatch.
+    copy(card->entry());
+    return true;
+}
+
+void MainWindow::reveal(Gtk::ListBoxRow& row) {
+    double row_x = 0.0;
+    double row_y = 0.0;
+    if (row.translate_coordinates(*list_, 0.0, 0.0, row_x, row_y)) {
+        // The list is what the viewport scrolls, so list coordinates are the
+        // adjustment's own.
+        scrolled_->get_vadjustment()->clamp_page(row_y, row_y + row.get_height());
+    }
 }
 
 void MainWindow::copy(const core::ClipboardEntry& entry) {
+    // ClipCard defers its click to an idle, so a fast double click can queue two
+    // copies of the same clip — which with auto-paste on injects Ctrl+V twice into
+    // the target app. The first one hid the window, so that is the signal to stop.
+    if (gtk_widget_get_visible(GTK_WIDGET(window_)) == FALSE) {
+        return;
+    }
     // Reconstruct the clipboard payload for the entry's kind. Image bytes are
     // fetched lazily by hash; rich text carries its HTML alongside the plain text.
     core::ClipContent content;
@@ -367,8 +474,17 @@ void MainWindow::copy(const core::ClipboardEntry& entry) {
     }
     // CopyAction handles clipboard + history + auto-paste; the window just hides.
     if (copy_action_.run(content)) {
-        gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+        hide();
     }
+}
+
+void MainWindow::hide() {
+    // Drop the filter on the way out, whichever path got here — pasting, clicking,
+    // closing or toggling. The window is a popup: reopening it on someone's old
+    // query (which grab_focus leaves unselected, so typing appends to it) is never
+    // what was meant.
+    search_->set_text("");
+    gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
 }
 
 void MainWindow::pin(const std::string& content) {
@@ -407,7 +523,7 @@ GtkWidget* MainWindow::native() const {
 
 void MainWindow::toggle() {
     if (gtk_widget_get_visible(GTK_WIDGET(window_)) != FALSE) {
-        gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
+        hide();
         return;
     }
     present();
