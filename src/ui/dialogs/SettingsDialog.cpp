@@ -4,6 +4,8 @@
 #include "core/Models.hpp"
 #include "ui/Constants.hpp"
 #include "ui/GnomeShortcut.hpp"
+#include "ui/KeyAction.hpp"
+#include "ui/ShortcutText.hpp"
 
 #include <adwaita.h>
 
@@ -12,6 +14,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,6 +25,17 @@ namespace {
 // Theme combo options, in display order; the index maps to a core::Theme.
 constexpr std::array<core::Theme, 3> kThemeOrder{core::Theme::System, core::Theme::Light,
                                                  core::Theme::Dark};
+
+// True when two accelerator strings bind the same key+mods (Return / KP_Enter
+// count as one). Used so paste and pin can't claim the same combo.
+[[nodiscard]] bool accelerators_collide(std::string_view left, std::string_view right) {
+    const BoundAccelerator a = bound_accelerator(left);
+    const BoundAccelerator b = bound_accelerator(right);
+    if (a.keyval == 0 || b.keyval == 0) {
+        return left == right; // unparseable: fall back to exact string equality
+    }
+    return a.matches(b.keyval, b.modifiers);
+}
 
 [[nodiscard]] unsigned int theme_index(core::Theme theme) {
     for (unsigned int i = 0; i < kThemeOrder.size(); ++i) {
@@ -82,7 +96,7 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     g_signal_connect(theme_row, "notify::selected", G_CALLBACK(&SettingsDialog::on_theme_selected),
                      this);
 
-    AdwPreferencesGroup* shortcut_group = add_group(page, "Shortcut");
+    AdwPreferencesGroup* shortcut_group = add_group(page, "Shortcuts");
 
     auto* shortcut_enabled_row = ADW_SWITCH_ROW(adw_switch_row_new());
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(shortcut_enabled_row), "Global shortcut");
@@ -94,10 +108,34 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     g_signal_connect(shortcut_enabled_row, "notify::active",
                      G_CALLBACK(&SettingsDialog::on_shortcut_toggled), this);
 
-    // Free-form shortcut capture plus preset quick-picks; applies on change.
-    shortcut_chooser_ = std::make_unique<ShortcutChooser>(
-        parent, shortcut_group, current.hotkey,
-        [this](const std::string& accelerator) { apply_accelerator(accelerator); });
+    // Same ShortcutChooser for open / paste / pin — only Config differs.
+    open_chooser_ = std::make_unique<ShortcutChooser>(
+        parent, shortcut_group,
+        ShortcutChooser::Config{.title = "Open CopyClip",
+                                .tooltip = "Key combination that summons the window",
+                                .require_modifier = true,
+                                .picks = quick_picks()},
+        current.hotkey,
+        [this](const std::string& accelerator) { apply_open_accelerator(accelerator); });
+
+    paste_chooser_ = std::make_unique<ShortcutChooser>(
+        parent, shortcut_group,
+        ShortcutChooser::Config{.title = "Paste clip",
+                                .tooltip = "Paste the highlighted clip (Enter by default)",
+                                .require_modifier = false,
+                                .picks = paste_quick_picks()},
+        current.paste_hotkey,
+        [this](const std::string& accelerator) { apply_paste_accelerator(accelerator); });
+
+    pin_chooser_ = std::make_unique<ShortcutChooser>(
+        parent, shortcut_group,
+        ShortcutChooser::Config{.title = "Pin / unpin",
+                                .tooltip =
+                                    "Pin or unpin the highlighted clip (Ctrl+Enter by default)",
+                                .require_modifier = false,
+                                .picks = pin_quick_picks()},
+        current.pin_hotkey,
+        [this](const std::string& accelerator) { apply_pin_accelerator(accelerator); });
 
     AdwPreferencesGroup* behaviour_group = add_group(page, "Behaviour");
 
@@ -132,7 +170,10 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     GtkWidget* toolbar = adw_toolbar_view_new();
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), GTK_WIDGET(page));
-    adw_dialog_set_child(dialog, toolbar);
+    // Toast overlay wraps the sheet so collision warnings land on the dialog.
+    toast_overlay_ = ADW_TOAST_OVERLAY(adw_toast_overlay_new());
+    adw_toast_overlay_set_child(toast_overlay_, toolbar);
+    adw_dialog_set_child(dialog, GTK_WIDGET(toast_overlay_));
     g_signal_connect(dialog, "closed", G_CALLBACK(&SettingsDialog::on_dialog_closed), this);
     adw_dialog_present(dialog, parent);
 }
@@ -165,14 +206,49 @@ void SettingsDialog::apply_theme(unsigned int index) {
     on_theme_changed_();
 }
 
-void SettingsDialog::apply_accelerator(const std::string& accelerator) {
+void SettingsDialog::update_string(std::string core::Settings::*field, const std::string& value) {
     core::Settings updated = settings_.get().settings();
-    updated.hotkey = accelerator;
+    updated.*field = value;
     settings_.get().update(updated);
+}
+
+void SettingsDialog::show_toast(const char* title) {
+    if (toast_overlay_ == nullptr) {
+        return;
+    }
+    AdwToast* toast = adw_toast_new(title);
+    adw_toast_set_timeout(toast, kSettingsToastTimeoutSec);
+    adw_toast_overlay_add_toast(toast_overlay_, toast);
+}
+
+void SettingsDialog::apply_open_accelerator(const std::string& accelerator) {
+    update_string(&core::Settings::hotkey, accelerator);
     // Only refresh the binding if the shortcut is currently enabled.
     if (is_gnome_shortcut_registered()) {
-        register_gnome_shortcut(executable_path(), updated.hotkey);
+        register_gnome_shortcut(executable_path(), accelerator);
     }
+}
+
+void SettingsDialog::apply_paste_accelerator(const std::string& accelerator) {
+    const core::Settings& current = settings_.get().settings();
+    if (accelerators_collide(accelerator, current.pin_hotkey)) {
+        // Chooser already previewed the combo; roll it back and tell the user.
+        // Keep the toast short — AdwToast ellipsizes a single line.
+        paste_chooser_->set_accelerator(current.paste_hotkey);
+        show_toast(kToastPasteCollidesWithPin);
+        return;
+    }
+    update_string(&core::Settings::paste_hotkey, accelerator);
+}
+
+void SettingsDialog::apply_pin_accelerator(const std::string& accelerator) {
+    const core::Settings& current = settings_.get().settings();
+    if (accelerators_collide(accelerator, current.paste_hotkey)) {
+        pin_chooser_->set_accelerator(current.pin_hotkey);
+        show_toast(kToastPinCollidesWithPaste);
+        return;
+    }
+    update_string(&core::Settings::pin_hotkey, accelerator);
 }
 
 void SettingsDialog::apply_shortcut_enabled(bool active) {

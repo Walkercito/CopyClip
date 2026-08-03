@@ -73,14 +73,25 @@ private:
     void schedule_refresh();
     void rebuild_cards();
     void apply_filter();
-    // The window's keyboard policy — Escape, Up/Down and Enter. Returns true when
-    // the key was consumed; everything else falls through to the focused widget.
+    // The window's keyboard policy — Escape, Up/Down, Enter and Ctrl+Enter.
+    // Returns true when the key was consumed; everything else falls through to
+    // the focused widget.
     bool on_key_pressed(guint keyval, guint keycode, Gdk::ModifierType state);
     // Move the highlighted row to the next/previous match, and scroll it into view.
     void move_selection(bool forward);
     // Paste the highlighted clip. False when there is nothing highlighted, so the
     // key keeps its stock behavior.
     bool activate_selection();
+    // Pin / unpin the highlighted clip. False when nothing is selected.
+    bool pin_selection();
+    // The selected ClipCard, or nullptr when the list has no keyboard cursor.
+    [[nodiscard]] ClipCard* selected_card() const;
+    // Drop the filter immediately (entry + cached query + list). GtkSearchEntry's
+    // search-changed is delayed ~150 ms; Escape and hide must not wait for it.
+    void clear_search();
+    // Pull the live entry into search_text_ and refilter if it changed. Call before
+    // paste/arrows so a fast type→Enter does not act on the pre-debounce list.
+    void sync_search_from_entry();
     // Scroll the list so `row` is visible — moving the selection from the search
     // entry never moves focus, so GTK won't scroll for us.
     void reveal(Gtk::ListBoxRow& row);

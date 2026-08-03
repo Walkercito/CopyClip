@@ -2,7 +2,7 @@
 
 // Builds and presents a plain AdwDialog (as a bottom sheet, like the welcome
 // dialog — an AdwPreferencesDialog floats centered on a fixed-size window) holding
-// theme, the open shortcut, and behaviour rows, persisting changes through the
+// theme, shortcuts, and behaviour rows, persisting changes through the
 // SettingsService. Applying the theme live is delegated to a callback (the window
 // owns the style manager). libadwaita has no C++ binding, so the dialog and its
 // rows are driven through its C API.
@@ -43,17 +43,28 @@ private:
     static void on_dialog_closed(AdwDialog* dialog, gpointer self);
 
     void apply_theme(unsigned int index);
-    void apply_accelerator(const std::string& accelerator);
+    void apply_open_accelerator(const std::string& accelerator);
+    void apply_paste_accelerator(const std::string& accelerator);
+    void apply_pin_accelerator(const std::string& accelerator);
     void apply_shortcut_enabled(bool active);
     void apply_auto_hide(bool active);
     void apply_auto_paste(bool active);
     void apply_panel_icon(bool active);
 
+    // Shared "read-modify-write" for string settings fields (paste/pin/open).
+    void update_string(std::string core::Settings::*field, const std::string& value);
+    // Toast on the dialog's overlay (collision warnings, etc.).
+    void show_toast(const char* title);
+
     std::reference_wrapper<core::SettingsService> settings_;
     ThemeChangedCallback on_theme_changed_;
     PanelIconChangedCallback on_panel_icon_changed_;
     ClosedCallback on_closed_;
-    std::unique_ptr<ShortcutChooser> shortcut_chooser_;
+    AdwToastOverlay* toast_overlay_ = nullptr; // dialog child; presents AdwToasts
+    // Three choosers share ShortcutChooser; kept alive for the dialog's lifetime.
+    std::unique_ptr<ShortcutChooser> open_chooser_;
+    std::unique_ptr<ShortcutChooser> paste_chooser_;
+    std::unique_ptr<ShortcutChooser> pin_chooser_;
 };
 
 } // namespace copyclip::ui

@@ -20,6 +20,10 @@ inline constexpr int kDefaultMaxHistoryItems = 70;
 // Default open shortcut as a GNOME accelerator (matches core::kDefaultPreset,
 // Super+V). Stored verbatim in settings and written straight to gsettings.
 inline constexpr std::string_view kDefaultHotkeyAccelerator = "<Super>v";
+// In-window actions, same accelerator syntax as the open shortcut ("Return",
+// "<Control>Return"). Parsed with gtk_accelerator_parse at the key handler.
+inline constexpr std::string_view kDefaultPasteAccelerator = "Return";
+inline constexpr std::string_view kDefaultPinAccelerator = "<Control>Return";
 inline constexpr std::string_view kHistoryDbName = "history.db";
 inline constexpr std::string_view kSettingsFileName = "settings.json";
 inline constexpr std::string_view kInstanceSocketName = "copyclip.sock";

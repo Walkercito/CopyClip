@@ -27,6 +27,14 @@ inline constexpr int kContentMargin = 12;
 // sheets.
 inline constexpr int kDialogContentWidth = 400;
 
+// How long a settings toast stays visible (AdwToast timeout, in seconds).
+inline constexpr unsigned int kSettingsToastTimeoutSec = 3;
+
+// Short enough for AdwToast's single-line ellipsis; contextual by which side
+// collided so the user knows which row already owns the combo.
+inline constexpr const char* kToastPasteCollidesWithPin = "Already used by Pin";
+inline constexpr const char* kToastPinCollidesWithPaste = "Already used by Paste";
+
 // Code points shown on a collapsed card before truncation.
 inline constexpr std::size_t kMaxPreviewChars = 120;
 

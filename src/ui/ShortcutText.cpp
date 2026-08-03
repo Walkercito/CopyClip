@@ -1,5 +1,6 @@
 #include "ui/ShortcutText.hpp"
 
+#include "config/Constants.hpp"
 #include "core/Hotkeys.hpp"
 
 #include <cstddef>
@@ -17,6 +18,17 @@ std::vector<QuickPick> quick_picks() {
                          .accelerator = core::accelerator_for(entry.first)});
     }
     return picks;
+}
+
+std::vector<QuickPick> paste_quick_picks() {
+    // Defaults share config:: constants with Settings; extra picks are free-form.
+    return {{.label = "Enter", .accelerator = std::string{config::kDefaultPasteAccelerator}},
+            {.label = "Ctrl+Enter", .accelerator = std::string{config::kDefaultPinAccelerator}}};
+}
+
+std::vector<QuickPick> pin_quick_picks() {
+    return {{.label = "Ctrl+Enter", .accelerator = std::string{config::kDefaultPinAccelerator}},
+            {.label = "Ctrl+P", .accelerator = "<Control>p"}};
 }
 
 std::vector<std::string> parse_keybinding_paths(std::string_view list) {

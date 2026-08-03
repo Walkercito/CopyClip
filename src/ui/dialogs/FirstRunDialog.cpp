@@ -1,6 +1,7 @@
 #include "ui/dialogs/FirstRunDialog.hpp"
 
 #include "ui/Constants.hpp"
+#include "ui/ShortcutText.hpp"
 
 #include <memory>
 #include <string>
@@ -38,8 +39,12 @@ FirstRunDialog::FirstRunDialog(GtkWidget* parent, std::string initial_accelerato
     // The chooser presents its capture sheet on the same window, over the welcome
     // dialog. Its callback tracks the chosen accelerator for finish().
     chooser_ = std::make_unique<ShortcutChooser>(
-        parent, ADW_PREFERENCES_GROUP(group), accelerator_,
-        [this](const std::string& accelerator) { accelerator_ = accelerator; });
+        parent, ADW_PREFERENCES_GROUP(group),
+        ShortcutChooser::Config{.title = "Open CopyClip",
+                                .tooltip = "Key combination that summons the window",
+                                .require_modifier = true,
+                                .picks = quick_picks()},
+        accelerator_, [this](const std::string& accelerator) { accelerator_ = accelerator; });
     gtk_box_append(GTK_BOX(content), group);
 
     GtkWidget* button = gtk_button_new_with_label("Get Started");

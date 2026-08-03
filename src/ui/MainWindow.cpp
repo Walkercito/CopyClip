@@ -393,7 +393,7 @@ void MainWindow::apply_filter() {
     stack_->set_visible_child(kPageEmpty);
 }
 
-bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierType /*state*/) {
+bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierType state) {
     // Settings and first-run are AdwDialogs presented inside this very window, and
     // menus are popovers in it — while either is up, its own keys must win.
     if (adw_application_window_get_visible_dialog(window_) != nullptr ||
@@ -403,26 +403,41 @@ bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierTy
     // Read the entry, not search_text_: GtkSearchEntry delays search-changed by
     // ~150 ms, so the cached copy lags behind text the user just typed — Escape
     // right after the first keystroke must still read as an active search.
-    // ponytail: an in-progress input-method preedit is not detected, so Enter and
+    // Caveat: an in-progress input-method preedit is not detected, so Enter and
     // the arrows preempt CJK candidate selection. Filter through Gtk::IMContext if
     // that ever matters.
     const KeyContext context{.search_active = !search_->get_text().empty(),
                              .button_focused = button_focused(GTK_WINDOW(window_))};
-    switch (key_action(keyval, context)) {
+    // Same GNOME accelerator strings Settings stores; mask matches BoundAccelerator.
+    const auto mod_mask = static_cast<Gdk::ModifierType>(gtk_accelerator_get_default_mod_mask());
+    const auto modifiers = static_cast<unsigned int>(state & mod_mask);
+    const core::Settings& cfg = settings_.get().settings();
+    const WindowShortcuts shortcuts{.paste = bound_accelerator(cfg.paste_hotkey),
+                                    .pin = bound_accelerator(cfg.pin_hotkey)};
+    switch (key_action(keyval, modifiers, context, shortcuts)) {
     case KeyAction::ClearSearch:
-        search_->set_text("");
+        clear_search();
         return true;
     case KeyAction::Dismiss:
         hide();
         return true;
     case KeyAction::SelectPrevious:
+        // Flush the debounced filter first so navigation matches what the user typed.
+        sync_search_from_entry();
         move_selection(false);
         return true;
     case KeyAction::SelectNext:
+        sync_search_from_entry();
         move_selection(true);
         return true;
     case KeyAction::Paste:
+        sync_search_from_entry();
         return activate_selection();
+    case KeyAction::TogglePin:
+        // Pin targets the selected row; keep the filter in sync so the cursor
+        // still points at a visible match after a just-typed query.
+        sync_search_from_entry();
+        return pin_selection();
     case KeyAction::None:
         return false;
     }
@@ -446,14 +461,45 @@ void MainWindow::move_selection(bool forward) {
     }
 }
 
+ClipCard* MainWindow::selected_card() const {
+    return dynamic_cast<ClipCard*>(list_->get_selected_row());
+}
+
+void MainWindow::clear_search() {
+    // Entry first so a late search-changed still sees empty; then force the
+    // filter state without waiting for GtkSearchEntry's ~150 ms debounce.
+    search_->set_text("");
+    search_text_.clear();
+    apply_filter();
+}
+
+void MainWindow::sync_search_from_entry() {
+    const std::string live = search_->get_text().raw();
+    if (live == search_text_) {
+        return;
+    }
+    search_text_ = live;
+    apply_filter();
+}
+
 bool MainWindow::activate_selection() {
-    auto* card = dynamic_cast<ClipCard*>(list_->get_selected_row());
+    ClipCard* const card = selected_card();
     if (card == nullptr) {
         return false;
     }
     // Straight through, unlike ClipCard's click: the rebuild copy() sets off is
     // itself deferred (see schedule_refresh), so no widget dies under this dispatch.
     copy(card->entry());
+    return true;
+}
+
+bool MainWindow::pin_selection() {
+    ClipCard* const card = selected_card();
+    if (card == nullptr) {
+        return false;
+    }
+    // Same path as Ctrl+click on a card; rebuild_cards keeps the keyboard cursor.
+    pin(card->entry().content);
     return true;
 }
 
@@ -496,12 +542,19 @@ void MainWindow::hide() {
     // Drop the filter on the way out, whichever path got here — pasting, clicking,
     // closing or toggling. The window is a popup: reopening it on someone's old
     // query (which grab_focus leaves unselected, so typing appends to it) is never
-    // what was meant.
-    search_->set_text("");
+    // what was meant. clear_search() also syncs search_text_ immediately so a
+    // fast hide→present cannot reopen with a stale filter.
+    clear_search();
     gtk_widget_set_visible(GTK_WIDGET(window_), FALSE);
 }
 
 void MainWindow::pin(const std::string& content) {
+    // Ctrl+click reaches ListBox as a selection toggle under SINGLE mode and can
+    // leave nothing selected before rebuild_cards snapshots the cursor. Re-assert
+    // the pin target as the selection so the keyboard cursor survives the rebuild.
+    if (const auto it = cards_.find(content); it != cards_.end()) {
+        list_->select_row(*it->second);
+    }
     history_.get().toggle_pin(content);
 }
 

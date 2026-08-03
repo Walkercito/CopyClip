@@ -50,6 +50,8 @@ TEST(ModelsTest, SettingsHaveReferenceDefaults) {
     const core::Settings settings{};
     EXPECT_EQ(settings.theme, core::Theme::Dark);
     EXPECT_EQ(settings.hotkey, config::kDefaultHotkeyAccelerator);
+    EXPECT_EQ(settings.paste_hotkey, config::kDefaultPasteAccelerator);
+    EXPECT_EQ(settings.pin_hotkey, config::kDefaultPinAccelerator);
     EXPECT_FALSE(settings.first_run_completed);
     EXPECT_EQ(settings.max_history_items, config::kDefaultMaxHistoryItems);
     EXPECT_EQ(settings.max_history_items, 70);
