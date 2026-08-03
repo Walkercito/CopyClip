@@ -9,6 +9,11 @@
 // new clip touches one widget, not all N. Search toggles each card's visibility in
 // place. Refreshes are deferred to an idle so a card may safely trigger one from
 // inside its own click handler.
+//
+// The window is keyboard-first: focus stays in the search entry, Up/Down move the
+// highlighted row through the filtered list, Enter pastes it, and Escape drops the
+// search before dismissing. A window-level key controller owns that policy, so the
+// keys work wherever focus happens to sit.
 
 #include "core/HistoryService.hpp"
 #include "core/Interfaces.hpp"
@@ -20,10 +25,16 @@
 
 #include <adwaita.h>
 
+#include <gdkmm/enums.h>
+
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
+#include <gtkmm/scrolledwindow.h>
 #include <gtkmm/searchentry.h>
 #include <gtkmm/stack.h>
+
+#include <glib.h>
 
 #include <cstddef>
 #include <functional>
@@ -62,7 +73,31 @@ private:
     void schedule_refresh();
     void rebuild_cards();
     void apply_filter();
+    // The window's keyboard policy — Escape, Up/Down, Enter and Ctrl+Enter.
+    // Returns true when the key was consumed; everything else falls through to
+    // the focused widget.
+    bool on_key_pressed(guint keyval, guint keycode, Gdk::ModifierType state);
+    // Move the highlighted row to the next/previous match, and scroll it into view.
+    void move_selection(bool forward);
+    // Paste the highlighted clip. False when there is nothing highlighted, so the
+    // key keeps its stock behavior.
+    bool activate_selection();
+    // Pin / unpin the highlighted clip. False when nothing is selected.
+    bool pin_selection();
+    // The selected ClipCard, or nullptr when the list has no keyboard cursor.
+    [[nodiscard]] ClipCard* selected_card() const;
+    // Drop the filter immediately (entry + cached query + list). GtkSearchEntry's
+    // search-changed is delayed ~150 ms; Escape and hide must not wait for it.
+    void clear_search();
+    // Pull the live entry into search_text_ and refilter if it changed. Call before
+    // paste/arrows so a fast type→Enter does not act on the pre-debounce list.
+    void sync_search_from_entry();
+    // Scroll the list so `row` is visible — moving the selection from the search
+    // entry never moves focus, so GTK won't scroll for us.
+    void reveal(Gtk::ListBoxRow& row);
     void copy(const core::ClipboardEntry& entry);
+    // Hide the window; the app keeps capturing in the background.
+    void hide();
     void pin(const std::string& content);
     void clear_history();
     void open_settings();
@@ -77,6 +112,7 @@ private:
     std::string search_text_;
     AdwApplicationWindow* window_ = nullptr;
     Gtk::Stack* stack_ = nullptr;
+    Gtk::ScrolledWindow* scrolled_ = nullptr; // holds list_; its vadjustment scrolls it
     Gtk::ListBox* list_ = nullptr;
     // Live cards keyed by their clip content, for incremental reconciliation. The
     // cards are owned by `list_`; these are non-owning observers kept in sync with

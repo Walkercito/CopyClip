@@ -15,9 +15,13 @@ struct QuickPick {
     std::string accelerator; // GNOME accelerator, e.g. "<Super>v"
 };
 
-// The built-in presets as quick-picks, in catalog order, so the capture UI can
-// offer common combos alongside free-form capture.
+// Built-in open-window presets as quick-picks (catalog order), for the global
+// shortcut chooser.
 [[nodiscard]] std::vector<QuickPick> quick_picks();
+
+// Common in-window paste / pin combos offered next to free-form capture.
+[[nodiscard]] std::vector<QuickPick> paste_quick_picks();
+[[nodiscard]] std::vector<QuickPick> pin_quick_picks();
 
 // Parse a gsettings string-array value ("[]", "@as []", or "['/a/', '/b/']")
 // into its entries.

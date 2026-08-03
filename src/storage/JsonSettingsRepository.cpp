@@ -25,6 +25,8 @@ namespace {
 // dataclass field names verbatim (it serializes via dataclasses.asdict()).
 constexpr const char* kKeyTheme = "theme";
 constexpr const char* kKeyHotkey = "hotkey";
+constexpr const char* kKeyPasteHotkey = "paste_hotkey";
+constexpr const char* kKeyPinHotkey = "pin_hotkey";
 constexpr const char* kKeyFirstRunCompleted = "first_run_completed";
 constexpr const char* kKeyMaxHistoryItems = "max_history_items";
 constexpr const char* kKeyAutoHideOnCopy = "auto_hide_on_copy";
@@ -70,6 +72,8 @@ constexpr int kJsonIndent = 2;
         .theme = *theme,
         // Accept both legacy preset tokens ("super_v") and raw accelerators.
         .hotkey = core::accelerator_from_stored(hotkey_text),
+        .paste_hotkey = json.value(kKeyPasteHotkey, defaults.paste_hotkey),
+        .pin_hotkey = json.value(kKeyPinHotkey, defaults.pin_hotkey),
         .first_run_completed = json.value(kKeyFirstRunCompleted, defaults.first_run_completed),
         .max_history_items = json.value(kKeyMaxHistoryItems, defaults.max_history_items),
         .auto_hide_on_copy = json.value(kKeyAutoHideOnCopy, defaults.auto_hide_on_copy),
@@ -115,6 +119,8 @@ void JsonSettingsRepository::save(const core::Settings& settings) {
 
     const nlohmann::json json = {{kKeyTheme, core::to_string(settings.theme)},
                                  {kKeyHotkey, settings.hotkey},
+                                 {kKeyPasteHotkey, settings.paste_hotkey},
+                                 {kKeyPinHotkey, settings.pin_hotkey},
                                  {kKeyFirstRunCompleted, settings.first_run_completed},
                                  {kKeyMaxHistoryItems, settings.max_history_items},
                                  {kKeyAutoHideOnCopy, settings.auto_hide_on_copy},

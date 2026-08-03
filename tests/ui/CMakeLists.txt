@@ -2,3 +2,4 @@ copyclip_add_test(clip_text_test SOURCES ClipTextTest.cpp LIBS copyclip::ui_text
 copyclip_add_test(shortcut_text_test SOURCES ShortcutTextTest.cpp LIBS copyclip::ui_text)
 copyclip_add_test(fuzzy_test SOURCES FuzzyTest.cpp LIBS copyclip::ui_text)
 copyclip_add_test(copy_action_test SOURCES CopyActionTest.cpp LIBS copyclip::ui)
+copyclip_add_test(key_action_test SOURCES KeyActionTest.cpp LIBS copyclip::ui)

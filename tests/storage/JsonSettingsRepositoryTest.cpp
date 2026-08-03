@@ -33,6 +33,8 @@ using copyclip::testing::TempDir;
 void expect_settings_eq(const core::Settings& actual, const core::Settings& expected) {
     EXPECT_EQ(actual.theme, expected.theme);
     EXPECT_EQ(actual.hotkey, expected.hotkey);
+    EXPECT_EQ(actual.paste_hotkey, expected.paste_hotkey);
+    EXPECT_EQ(actual.pin_hotkey, expected.pin_hotkey);
     EXPECT_EQ(actual.first_run_completed, expected.first_run_completed);
     EXPECT_EQ(actual.max_history_items, expected.max_history_items);
     EXPECT_EQ(actual.auto_hide_on_copy, expected.auto_hide_on_copy);
@@ -73,6 +75,8 @@ TEST_F(JsonSettingsRepositoryTest, LoadReturnsDefaultsWhenMissing) {
 TEST_F(JsonSettingsRepositoryTest, SaveThenLoadRoundtrip) {
     const core::Settings saved{.theme = core::Theme::Light,
                                .hotkey = "<Control><Alt>v",
+                               .paste_hotkey = "<Control>v",
+                               .pin_hotkey = "<Control>p",
                                .first_run_completed = true,
                                .max_history_items = config::kDefaultMaxHistoryItems,
                                .auto_hide_on_copy = true,

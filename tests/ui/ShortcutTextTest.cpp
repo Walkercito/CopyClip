@@ -9,6 +9,8 @@ namespace {
 
 using copyclip::ui::build_keybinding_array;
 using copyclip::ui::parse_keybinding_paths;
+using copyclip::ui::paste_quick_picks;
+using copyclip::ui::pin_quick_picks;
 using copyclip::ui::quick_picks;
 using copyclip::ui::QuickPick;
 
@@ -23,6 +25,18 @@ TEST(ShortcutTextTest, QuickPicksExposePresetLabelsAndAccelerators) {
         EXPECT_FALSE(pick.label.empty());
         EXPECT_FALSE(pick.accelerator.empty());
     }
+}
+
+// In-window paste/pin choosers share the same QuickPick shape with defaults that
+// match config::kDefaultPasteAccelerator / kDefaultPinAccelerator.
+TEST(ShortcutTextTest, PasteAndPinQuickPicksExposeDefaults) {
+    const std::vector<QuickPick> paste = paste_quick_picks();
+    ASSERT_FALSE(paste.empty());
+    EXPECT_EQ(paste.front().accelerator, "Return");
+
+    const std::vector<QuickPick> pin = pin_quick_picks();
+    ASSERT_FALSE(pin.empty());
+    EXPECT_EQ(pin.front().accelerator, "<Control>Return");
 }
 
 TEST(ShortcutTextTest, ParsesEntries) {

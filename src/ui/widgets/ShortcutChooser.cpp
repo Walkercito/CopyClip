@@ -1,7 +1,6 @@
 #include "ui/widgets/ShortcutChooser.hpp"
 
 #include "ui/Constants.hpp"
-#include "ui/ShortcutText.hpp"
 
 #include <adwaita.h>
 #include <gdk/gdkkeysyms.h>
@@ -18,8 +17,9 @@ namespace {
 constexpr const char* kCustomLabel = "Custom…";
 
 // Shown in the capture sheet until keys are held.
-constexpr const char* kCapturePrompt =
+constexpr const char* kCapturePromptWithModifier =
     "Use at least one modifier, e.g. Super or Ctrl. Esc to cancel.";
+constexpr const char* kCapturePromptAnyKey = "Press a key or key combination. Esc to cancel.";
 
 // The accelerator mask for a lone modifier keyval, so the live preview can show a
 // modifier the moment it is pressed (its bit isn't in the event state yet).
@@ -81,12 +81,14 @@ constexpr const char* kCapturePrompt =
 
 } // namespace
 
-ShortcutChooser::ShortcutChooser(GtkWidget* parent, AdwPreferencesGroup* group, std::string initial,
-                                 AcceleratorCallback on_changed)
-    : parent_{parent}, on_changed_{std::move(on_changed)}, accelerator_{std::move(initial)},
-      combo_row_{ADW_COMBO_ROW(adw_combo_row_new())} {
-    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(combo_row_), "Open CopyClip");
-    gtk_widget_set_tooltip_text(GTK_WIDGET(combo_row_), "Key combination that summons the window");
+ShortcutChooser::ShortcutChooser(GtkWidget* parent, AdwPreferencesGroup* group, Config config,
+                                 std::string initial, AcceleratorCallback on_changed)
+    : parent_{parent}, config_{std::move(config)}, on_changed_{std::move(on_changed)},
+      accelerator_{std::move(initial)}, combo_row_{ADW_COMBO_ROW(adw_combo_row_new())} {
+    adw_preferences_row_set_title(ADW_PREFERENCES_ROW(combo_row_), config_.title.c_str());
+    if (!config_.tooltip.empty()) {
+        gtk_widget_set_tooltip_text(GTK_WIDGET(combo_row_), config_.tooltip.c_str());
+    }
     adw_preferences_group_add(group, GTK_WIDGET(combo_row_));
     g_signal_connect(combo_row_, "notify::selected", G_CALLBACK(&ShortcutChooser::on_selected),
                      this);
@@ -110,23 +112,23 @@ ShortcutChooser::~ShortcutChooser() {
 }
 
 bool ShortcutChooser::is_custom() const {
-    return current_index() == static_cast<unsigned int>(quick_picks().size());
+    return current_index() == static_cast<unsigned int>(config_.picks.size());
 }
 
 unsigned int ShortcutChooser::current_index() const {
-    const std::vector<QuickPick> picks = quick_picks();
-    for (unsigned int i = 0; i < picks.size(); ++i) {
-        if (picks.at(i).accelerator == accelerator_) {
+    for (unsigned int i = 0; i < config_.picks.size(); ++i) {
+        if (config_.picks.at(i).accelerator == accelerator_) {
             return i;
         }
     }
-    return static_cast<unsigned int>(picks.size()); // the custom entry, listed after the presets
+    return static_cast<unsigned int>(
+        config_.picks.size()); // the custom entry, listed after the presets
 }
 
 void ShortcutChooser::rebuild() {
     suppress_ = true;
     GtkStringList* model = gtk_string_list_new(nullptr);
-    for (const QuickPick& pick : quick_picks()) {
+    for (const QuickPick& pick : config_.picks) {
         gtk_string_list_append(model, pick.label.c_str());
     }
     if (is_custom()) {
@@ -155,10 +157,9 @@ gboolean ShortcutChooser::dispatch_selection(gpointer self_ptr) {
     auto* self = static_cast<ShortcutChooser*>(self_ptr);
     self->pending_ = 0;
     const unsigned int index = adw_combo_row_get_selected(self->combo_row_);
-    const std::vector<QuickPick> picks = quick_picks();
-    const auto preset_count = static_cast<unsigned int>(picks.size());
+    const auto preset_count = static_cast<unsigned int>(self->config_.picks.size());
     if (index < preset_count) {
-        self->apply(picks.at(index).accelerator);
+        self->apply(self->config_.picks.at(index).accelerator);
     } else if (index == (self->is_custom() ? preset_count + 1 : preset_count)) {
         // "Custom…": restore the selection so cancelling keeps the current shortcut,
         // then open the capture sheet.
@@ -193,7 +194,8 @@ gboolean ShortcutChooser::on_key_pressed(GtkEventControllerKey* /*controller*/, 
         return TRUE;
     }
     const auto mods = static_cast<GdkModifierType>(held);
-    if (held != 0 && gtk_accelerator_valid(keyval, mods) != FALSE) {
+    const bool mods_ok = !chooser->config_.require_modifier || held != 0;
+    if (mods_ok && gtk_accelerator_valid(keyval, mods) != FALSE) {
         // A complete, valid combo: preview and remember it, but commit on release.
         char* name = gtk_accelerator_name(keyval, mods);
         chooser->captured_ = name != nullptr ? name : std::string{};
@@ -228,7 +230,9 @@ void ShortcutChooser::show_keys(guint keyval, GdkModifierType mods) {
     }
     char* label = gtk_accelerator_get_label(keyval, mods);
     const bool have = label != nullptr && *label != '\0';
-    adw_status_page_set_description(capture_status_, have ? label : kCapturePrompt);
+    const char* prompt =
+        config_.require_modifier ? kCapturePromptWithModifier : kCapturePromptAnyKey;
+    adw_status_page_set_description(capture_status_, have ? label : prompt);
     g_free(label);
 }
 
@@ -242,7 +246,9 @@ void ShortcutChooser::open_capture() {
     adw_status_page_set_icon_name(ADW_STATUS_PAGE(status),
                                   "preferences-desktop-keyboard-shortcuts-symbolic");
     adw_status_page_set_title(ADW_STATUS_PAGE(status), "Press your shortcut");
-    adw_status_page_set_description(ADW_STATUS_PAGE(status), kCapturePrompt);
+    const char* prompt =
+        config_.require_modifier ? kCapturePromptWithModifier : kCapturePromptAnyKey;
+    adw_status_page_set_description(ADW_STATUS_PAGE(status), prompt);
     capture_status_ = ADW_STATUS_PAGE(status); // live-updated as keys are pressed
     captured_.clear();
 
@@ -264,6 +270,14 @@ void ShortcutChooser::open_capture() {
     g_signal_connect(capture_dialog_, "closed", G_CALLBACK(&ShortcutChooser::on_capture_closed),
                      this);
     adw_dialog_present(capture_dialog_, parent_);
+}
+
+void ShortcutChooser::set_accelerator(const std::string& accelerator) {
+    if (accelerator == accelerator_) {
+        return;
+    }
+    accelerator_ = accelerator;
+    rebuild();
 }
 
 void ShortcutChooser::apply(const std::string& accelerator) {
