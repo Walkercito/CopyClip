@@ -1,9 +1,10 @@
 name: Set up build environment
 description: >
   Install system dependencies (Qt6, GTK4/gtkmm/libadwaita, X11, Ninja, optionally
-  Valgrind), bootstrap vcpkg with a FULL clone (a shallow clone cannot resolve the
-  pinned builtin-baseline in vcpkg.json), and cache vcpkg artifacts. Expects the
-  calling job to set the VCPKG_ROOT environment variable.
+  Valgrind), bootstrap vcpkg pinned to the manifest's builtin-baseline (a floating
+  master tip can require a newer CMake than the runner has — e.g. STRING_ENCODE
+  in SPDX helpers), and cache vcpkg artifacts. Expects the calling job to set the
+  VCPKG_ROOT environment variable.
 
 inputs:
   valgrind:
@@ -24,11 +25,17 @@ runs:
           sudo apt-get install -y valgrind
         fi
 
-    - name: Bootstrap vcpkg (full clone)
+    - name: Bootstrap vcpkg (pinned to builtin-baseline)
       shell: bash
       run: |
         if [ ! -x "$VCPKG_ROOT/vcpkg" ]; then
+          # Pin the tool + ports tree to the same commit as vcpkg.json so CI does
+          # not float on master scripts (which may need a newer CMake than the
+          # runner ships). Full clone: shallow trees cannot resolve all version
+          # git-trees the baseline ports need.
+          baseline="$(python3 -c "import json; print(json.load(open('vcpkg.json'))['builtin-baseline'])")"
           git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout --detach "$baseline"
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
         fi
 
@@ -38,6 +45,7 @@ runs:
         path: |
           ~/.cache/vcpkg/archives
           ${{ env.VCPKG_ROOT }}/downloads
-        key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+        # Arch-separated: arm64-linux and x64-linux ABIs must not share a key.
+        key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vcpkg.json') }}
         restore-keys: |
-          vcpkg-${{ runner.os }}-
+          vcpkg-${{ runner.os }}-${{ runner.arch }}-
