@@ -37,6 +37,7 @@ struct BoundAccelerator {
 
     // True when the event matches this binding. Return / KP_Enter / ISO_Enter
     // are treated as the same key so the default paste binding covers them all.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): keyval/modifiers read clearly.
     [[nodiscard]] bool matches(unsigned int event_keyval, unsigned int event_modifiers) const;
 };
 

@@ -13,18 +13,14 @@ namespace {
     return keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter || keyval == GDK_KEY_ISO_Enter;
 }
 
-// Keys that activate a focused button (Return family and space). A paste binding
-// that is just one of these unmodified must yield when a button holds focus;
-// modified paste combos (e.g. Ctrl+V) never do — buttons do not handle them.
-[[nodiscard]] bool is_unmodified_activate_key(unsigned int keyval, unsigned int modifiers) {
-    if (modifiers != 0) {
-        return false;
-    }
+// Keys that activate a focused button (Return family and space).
+[[nodiscard]] bool is_activate_key(unsigned int keyval) {
     return is_return_key(keyval) || keyval == GDK_KEY_space;
 }
 
 } // namespace
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): keyval/modifiers read clearly.
 bool BoundAccelerator::matches(unsigned int event_keyval, unsigned int event_modifiers) const {
     if (keyval == 0) {
         return false;
@@ -45,7 +41,7 @@ BoundAccelerator bound_accelerator(std::string_view accelerator) {
     }
     const std::string name{accelerator};
     guint keyval = 0;
-    GdkModifierType mods = static_cast<GdkModifierType>(0);
+    auto mods = static_cast<GdkModifierType>(0);
     gtk_accelerator_parse(name.c_str(), &keyval, &mods);
     if (keyval == 0) {
         return {};
@@ -75,7 +71,7 @@ KeyAction key_action(unsigned int keyval, unsigned int modifiers, const KeyConte
     if (shortcuts.paste.matches(keyval, modifiers)) {
         // A focused button owns unmodified activate keys (Return, space). Modified
         // paste bindings still paste — Settings/Clear never consume Ctrl+V.
-        if (context.button_focused && is_unmodified_activate_key(keyval, modifiers)) {
+        if (context.button_focused && modifiers == 0 && is_activate_key(keyval)) {
             return KeyAction::None;
         }
         return KeyAction::Paste;

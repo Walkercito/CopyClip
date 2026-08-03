@@ -79,7 +79,8 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
                                PanelIconChangedCallback on_panel_icon_changed,
                                ClosedCallback on_closed)
     : settings_{settings}, on_theme_changed_{std::move(on_theme_changed)},
-      on_panel_icon_changed_{std::move(on_panel_icon_changed)}, on_closed_{std::move(on_closed)} {
+      on_panel_icon_changed_{std::move(on_panel_icon_changed)}, on_closed_{std::move(on_closed)},
+      toast_overlay_{ADW_TOAST_OVERLAY(adw_toast_overlay_new())} {
     const core::Settings& current = settings.settings();
 
     // A plain AdwDialog (not AdwPreferencesDialog) so it presents as a bottom sheet
@@ -171,7 +172,6 @@ SettingsDialog::SettingsDialog(GtkWidget* parent, core::SettingsService& setting
     adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
     adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), GTK_WIDGET(page));
     // Toast overlay wraps the sheet so collision warnings land on the dialog.
-    toast_overlay_ = ADW_TOAST_OVERLAY(adw_toast_overlay_new());
     adw_toast_overlay_set_child(toast_overlay_, toolbar);
     adw_dialog_set_child(dialog, GTK_WIDGET(toast_overlay_));
     g_signal_connect(dialog, "closed", G_CALLBACK(&SettingsDialog::on_dialog_closed), this);
