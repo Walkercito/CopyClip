@@ -18,6 +18,7 @@
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <map>
@@ -277,6 +278,16 @@ void MainWindow::rebuild_cards() {
     const std::vector<core::ClipboardEntry> entries = history_.get().entries();
     card_count_ = entries.size();
 
+    // A fresh add() — a new copy, or pasting a clip back — stamps the newest entry
+    // with clock.now(), lifting the max created_at; pin and remove never do. That
+    // lift is the cue to jump back to the top so the cursor lands on the new clip.
+    std::chrono::system_clock::time_point newest{};
+    for (const core::ClipboardEntry& entry : entries) {
+        newest = std::max(newest, entry.created_at);
+    }
+    const bool new_item_arrived = newest > last_seen_newest_;
+    last_seen_newest_ = std::max(last_seen_newest_, newest);
+
     // Pinning recreates the very card the cursor sits on, taking the selection with
     // it. Remember what it held so the cursor can be put back below, instead of
     // apply_filter snapping it to the top of the list.
@@ -338,6 +349,12 @@ void MainWindow::rebuild_cards() {
 
     list_->invalidate_sort();
     apply_filter();
+
+    // After apply_filter has settled the filtered selection: a just-added clip pulls
+    // the cursor to the top, overriding the restored selection above.
+    if (new_item_arrived) {
+        reset_to_top();
+    }
 }
 
 void MainWindow::apply_filter() {
@@ -503,6 +520,15 @@ bool MainWindow::pin_selection() {
     return true;
 }
 
+void MainWindow::reset_to_top() {
+    if (Gtk::ListBoxRow* const first = visible_row_from(list_->get_first_child(), true);
+        first != nullptr) {
+        list_->select_row(*first);
+    }
+    // The list is what the viewport scrolls, so 0 is the very top.
+    scrolled_->get_vadjustment()->set_value(0.0);
+}
+
 void MainWindow::reveal(Gtk::ListBoxRow& row) {
     double row_x = 0.0;
     double row_y = 0.0;
@@ -598,6 +624,9 @@ void MainWindow::toggle() {
 
 void MainWindow::present() {
     gtk_window_present(GTK_WINDOW(window_));
+    // A summon lands at the top of the list, newest clip highlighted, rather than
+    // wherever the cursor and scroll last sat.
+    reset_to_top();
     // Start on the search field (type to filter); never leave a header button
     // showing the focus ring.
     if (gtk_widget_get_visible(GTK_WIDGET(search_->gobj())) != FALSE) {

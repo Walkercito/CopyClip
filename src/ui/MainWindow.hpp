@@ -36,6 +36,7 @@
 
 #include <glib.h>
 
+#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <map>
@@ -84,6 +85,8 @@ private:
     bool activate_selection();
     // Pin / unpin the highlighted clip. False when nothing is selected.
     bool pin_selection();
+    // Highlight the newest (top) match and scroll the list back up to it.
+    void reset_to_top();
     // The selected ClipCard, or nullptr when the list has no keyboard cursor.
     [[nodiscard]] ClipCard* selected_card() const;
     // Drop the filter immediately (entry + cached query + list). GtkSearchEntry's
@@ -110,6 +113,9 @@ private:
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
+    // The newest created_at seen so far. When a rebuild's max exceeds it, a clip was
+    // just added (a copy or a paste) — the cue to snap the list back to the top.
+    std::chrono::system_clock::time_point last_seen_newest_{};
     AdwApplicationWindow* window_ = nullptr;
     Gtk::Stack* stack_ = nullptr;
     Gtk::ScrolledWindow* scrolled_ = nullptr; // holds list_; its vadjustment scrolls it
