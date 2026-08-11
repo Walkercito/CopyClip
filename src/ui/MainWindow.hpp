@@ -95,6 +95,9 @@ private:
     // (gone, or hidden by the filter), leaving the cursor untouched for the caller to
     // decide what that means.
     bool cursor_to(const std::string& content);
+    // Delete the highlighted clip, moving the cursor to the next match first so the
+    // key can be pressed repeatedly down the list. False when nothing is selected.
+    bool remove_selection();
     // The selected ClipCard, or nullptr when the list has no keyboard cursor.
     [[nodiscard]] ClipCard* selected_card() const;
     // Drop the filter immediately (entry + cached query + list). GtkSearchEntry's

@@ -482,6 +482,9 @@ bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierTy
         // still points at a visible match after a just-typed query.
         sync_search_from_entry();
         return pin_selection();
+    case KeyAction::RemoveSelected:
+        // Only reached with an empty search (see key_action), so no filter to sync.
+        return remove_selection();
     case KeyAction::None:
         return false;
     }
@@ -555,6 +558,28 @@ void MainWindow::reset_to_top() {
         list_->unselect_all(); // the filter hid every card: nothing to put it on
     }
     scrolled_->get_vadjustment()->set_value(kScrollTop);
+}
+
+bool MainWindow::remove_selection() {
+    ClipCard* const card = selected_card();
+    if (card == nullptr) {
+        return false;
+    }
+    const std::string content = card->entry().content;
+    // Hand the cursor to the neighbour that will outlive the removal — next match,
+    // else previous — so rebuild_cards restores the selection there instead of
+    // letting apply_filter snap it to the top. Delete can then be held down the list.
+    Gtk::ListBoxRow* neighbour = visible_row_from(card->get_next_sibling(), true);
+    if (neighbour == nullptr) {
+        neighbour = visible_row_from(card->get_prev_sibling(), false);
+    }
+    if (neighbour != nullptr) {
+        list_->select_row(*neighbour);
+    }
+    // remove() drops the entry whatever its pin state — Delete is an explicit user
+    // act, unlike the Clear button which spares pinned clips (clear_unpinned).
+    history_.get().remove(content);
+    return true;
 }
 
 void MainWindow::reveal(Gtk::ListBoxRow& row) {

@@ -127,6 +127,7 @@ To start hidden — for autostart entries — pass `--background`.
 | <kbd>Super</kbd>+<kbd>C</kbd> | Toggle the CopyClip window (default; configurable) |
 | <kbd>Click</kbd> | Copy the clip (and auto-paste if enabled) |
 | <kbd>Ctrl</kbd>+<kbd>Click</kbd> | Pin / unpin a clip |
+| <kbd>Delete</kbd> | Remove the highlighted clip |
 | Type | Fuzzy-search the history |
 | <kbd>Esc</kbd> | Hide the window |
 

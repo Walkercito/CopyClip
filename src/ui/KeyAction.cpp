@@ -87,6 +87,14 @@ KeyAction key_action(unsigned int keyval, unsigned int modifiers, const KeyConte
         case GDK_KEY_Down:
         case GDK_KEY_KP_Down:
             return KeyAction::SelectNext;
+        case GDK_KEY_Delete:
+        case GDK_KEY_KP_Delete:
+            // Delete removes the highlighted clip — but only outside an active search,
+            // where the entry needs Delete to forward-delete the query text.
+            if (!context.search_active) {
+                return KeyAction::RemoveSelected;
+            }
+            break;
         default:
             break;
         }

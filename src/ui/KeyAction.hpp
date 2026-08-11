@@ -19,6 +19,7 @@ enum class KeyAction : std::uint8_t {
     SelectNext,     // move the highlight to the next match
     Paste,          // paste the highlighted clip
     TogglePin,      // pin / unpin the highlighted clip
+    RemoveSelected, // delete the highlighted clip from history
 };
 
 // The window state the policy depends on. Grouped in a struct so the call site

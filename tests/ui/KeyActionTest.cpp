@@ -106,6 +106,24 @@ TEST(KeyActionTest, ModifiedArrowsFallThrough) {
     EXPECT_EQ(act(GDK_KEY_KP_Down, GDK_CONTROL_MASK | GDK_SHIFT_MASK), KeyAction::None);
 }
 
+// Delete removes the highlighted clip when the user is not filtering.
+TEST(KeyActionTest, DeleteRemovesTheSelectionWhenNotSearching) {
+    EXPECT_EQ(act(GDK_KEY_Delete), KeyAction::RemoveSelected);
+    EXPECT_EQ(act(GDK_KEY_KP_Delete), KeyAction::RemoveSelected);
+}
+
+// Mid-search, Delete belongs to the entry (forward-delete a character), or the
+// filter can't be edited with it.
+TEST(KeyActionTest, DeleteEditsTextWhileSearching) {
+    EXPECT_EQ(act(GDK_KEY_Delete, 0, kSearching), KeyAction::None);
+    EXPECT_EQ(act(GDK_KEY_KP_Delete, 0, kSearching), KeyAction::None);
+}
+
+// Modified Delete falls through so the entry keeps Ctrl+Delete (word delete).
+TEST(KeyActionTest, ModifiedDeleteFallsThrough) {
+    EXPECT_EQ(act(GDK_KEY_Delete, GDK_CONTROL_MASK), KeyAction::None);
+}
+
 // Typing must reach the search entry untouched, or the filter stops working.
 TEST(KeyActionTest, OtherKeysFallThrough) {
     EXPECT_EQ(act(GDK_KEY_a, 0, kSearching), KeyAction::None);
