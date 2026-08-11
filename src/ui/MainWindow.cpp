@@ -8,6 +8,8 @@
 #include "ui/Theme.hpp"
 #include "ui/widgets/ClipCard.hpp"
 
+#include <gdkmm/frameclock.h>
+
 #include <gtkmm/adjustment.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -18,6 +20,7 @@
 #include <glibmm/main.h>
 #include <glibmm/ustring.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <map>
@@ -38,6 +41,8 @@ namespace {
 constexpr int kPlaceholderIconSize = 48;
 constexpr const char* kPageList = "list";
 constexpr const char* kPageEmpty = "empty";
+// The list is what the viewport scrolls, so its adjustment reads 0 at the very top.
+constexpr double kScrollTop = 0.0;
 
 // Return freed heap pages to the OS; glibc otherwise keeps them in its arenas, so
 // RSS never falls back after a peak (e.g. an image card's decode buffers). A free
@@ -92,6 +97,12 @@ void trim_heap() {
 [[nodiscard]] bool popover_focused(GtkWindow* window) {
     GtkWidget* focus = gtk_window_get_focus(window);
     return focus != nullptr && gtk_widget_get_ancestor(focus, GTK_TYPE_POPOVER) != nullptr;
+}
+
+// True once the layout has given `widget` a place in its parent; until then it has
+// no size, and asking where it sits answers nothing.
+[[nodiscard]] bool is_laid_out(const Gtk::Widget& widget) {
+    return widget.get_height() > 0;
 }
 
 // The first row at or after `start`, scanning in display order or against it, that
@@ -277,6 +288,17 @@ void MainWindow::rebuild_cards() {
     const std::vector<core::ClipboardEntry> entries = history_.get().entries();
     card_count_ = entries.size();
 
+    // A fresh add() — a new copy, or pasting a clip back — stamps the newest entry
+    // with clock.now(), lifting the max created_at; pin and remove never do. That
+    // lift is what marks a clip as newly arrived. Its key, or "" when nothing
+    // arrived: no entry can key on empty, since add() rejects blanks.
+    const auto newest = std::ranges::max_element(entries, {}, &core::ClipboardEntry::created_at);
+    std::string arrived_content;
+    if (newest != entries.end() && newest->created_at > last_seen_newest_) {
+        last_seen_newest_ = newest->created_at;
+        arrived_content = newest->content;
+    }
+
     // Pinning recreates the very card the cursor sits on, taking the selection with
     // it. Remember what it held so the cursor can be put back below, instead of
     // apply_filter snapping it to the top of the list.
@@ -338,6 +360,39 @@ void MainWindow::rebuild_cards() {
 
     list_->invalidate_sort();
     apply_filter();
+
+    // After apply_filter has settled the filtered selection, so the arrival wins over
+    // the selection restored above: it takes the cursor now if the window is up to
+    // see it, and waits for the next summon otherwise.
+    if (!arrived_content.empty() && (!showing() || !cursor_to(arrived_content))) {
+        pending_arrival_ = arrived_content;
+    }
+}
+
+bool MainWindow::cursor_to(const std::string& content) {
+    const auto card = cards_.find(content);
+    if (card == cards_.end() || !card->second->get_visible()) {
+        return false;
+    }
+    list_->select_row(*card->second);
+    // Scrolling to it has to wait for the frame that lays the row out: a card
+    // appended moments ago — and every card in a window only just presented — is not
+    // placed yet, so reveal() here would find no position and do nothing. A tick
+    // callback retries once per frame, so the wait costs frames rather than a
+    // spinning idle.
+    list_->add_tick_callback([this, content](const Glib::RefPtr<Gdk::FrameClock>&) {
+        // Re-find it: a rebuild in between may have recreated or dropped the card.
+        const auto row = cards_.find(content);
+        if (row == cards_.end() || !row->second->get_visible()) {
+            return false; // gone, or the filter hid it: nothing left to scroll to
+        }
+        if (!is_laid_out(*row->second)) {
+            return true; // ask again next frame
+        }
+        reveal(*row->second);
+        return false;
+    });
+    return true;
 }
 
 void MainWindow::apply_filter() {
@@ -345,7 +400,6 @@ void MainWindow::apply_filter() {
     search_->set_visible(card_count_ > 0);
 
     const Gtk::ListBoxRow* selected = list_->get_selected_row();
-    ClipCard* first_shown = nullptr;
     bool selection_shown = false;
     std::size_t visible = 0;
     for (Gtk::Widget* child = list_->get_first_child(); child != nullptr;
@@ -360,23 +414,13 @@ void MainWindow::apply_filter() {
             continue;
         }
         ++visible;
-        if (first_shown == nullptr) {
-            first_shown = card;
-        }
         selection_shown = selection_shown || card == selected;
     }
 
     // Always leave a row highlighted for Enter to act on. When the filter — or a
-    // rebuild that dropped the card — took the selection away, fall back to the
-    // first match and scroll back up to it: hidden rows get no allocation, so that
-    // row sits at the very top of the list.
+    // rebuild that dropped the card — took the selection away, the cursor goes home.
     if (!selection_shown) {
-        if (first_shown != nullptr) {
-            list_->select_row(*first_shown);
-            scrolled_->get_vadjustment()->set_value(0.0);
-        } else {
-            list_->unselect_all();
-        }
+        reset_to_top();
     }
 
     if (visible > 0) {
@@ -503,6 +547,16 @@ bool MainWindow::pin_selection() {
     return true;
 }
 
+void MainWindow::reset_to_top() {
+    if (Gtk::ListBoxRow* const first = visible_row_from(list_->get_first_child(), true);
+        first != nullptr) {
+        list_->select_row(*first);
+    } else {
+        list_->unselect_all(); // the filter hid every card: nothing to put it on
+    }
+    scrolled_->get_vadjustment()->set_value(kScrollTop);
+}
+
 void MainWindow::reveal(Gtk::ListBoxRow& row) {
     double row_x = 0.0;
     double row_y = 0.0;
@@ -517,7 +571,7 @@ void MainWindow::copy(const core::ClipboardEntry& entry) {
     // ClipCard defers its click to an idle, so a fast double click can queue two
     // copies of the same clip — which with auto-paste on injects Ctrl+V twice into
     // the target app. The first one hid the window, so that is the signal to stop.
-    if (gtk_widget_get_visible(GTK_WIDGET(window_)) == FALSE) {
+    if (!showing()) {
         return;
     }
     // Reconstruct the clipboard payload for the entry's kind. Image bytes are
@@ -588,8 +642,12 @@ GtkWidget* MainWindow::native() const {
     return GTK_WIDGET(window_);
 }
 
+bool MainWindow::showing() const {
+    return gtk_widget_get_visible(GTK_WIDGET(window_)) != FALSE;
+}
+
 void MainWindow::toggle() {
-    if (gtk_widget_get_visible(GTK_WIDGET(window_)) != FALSE) {
+    if (showing()) {
         hide();
         return;
     }
@@ -598,6 +656,12 @@ void MainWindow::toggle() {
 
 void MainWindow::present() {
     gtk_window_present(GTK_WINDOW(window_));
+    // A summon lands on the clip copied since the list was last looked at, and at the
+    // top of the list when nothing new came in — never on wherever the cursor and
+    // scroll last sat. Consumed either way: an arrival is only special until shown.
+    if (!cursor_to(std::exchange(pending_arrival_, {}))) {
+        reset_to_top();
+    }
     // Start on the search field (type to filter); never leave a header button
     // showing the focus ring.
     if (gtk_widget_get_visible(GTK_WIDGET(search_->gobj())) != FALSE) {

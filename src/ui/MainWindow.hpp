@@ -36,6 +36,7 @@
 
 #include <glib.h>
 
+#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <map>
@@ -67,6 +68,8 @@ public:
     [[nodiscard]] GtkWidget* native() const;
 
 private:
+    // True while the window is on screen, as opposed to hidden in the background.
+    [[nodiscard]] bool showing() const;
     void build_ui(GtkApplication* application);
     // Create or drop the panel icon to match the show_panel_icon setting.
     void refresh_tray();
@@ -84,6 +87,14 @@ private:
     bool activate_selection();
     // Pin / unpin the highlighted clip. False when nothing is selected.
     bool pin_selection();
+    // Send the cursor home: highlight the first match and scroll the list back up to
+    // it, or leave nothing highlighted when the filter hid every card.
+    void reset_to_top();
+    // Put the cursor on `content`'s card and scroll it into view — pinned clips sort
+    // above the newest, so that is rarely the top. False when no such card is shown
+    // (gone, or hidden by the filter), leaving the cursor untouched for the caller to
+    // decide what that means.
+    bool cursor_to(const std::string& content);
     // The selected ClipCard, or nullptr when the list has no keyboard cursor.
     [[nodiscard]] ClipCard* selected_card() const;
     // Drop the filter immediately (entry + cached query + list). GtkSearchEntry's
@@ -110,6 +121,15 @@ private:
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
+    // The newest created_at seen so far. When a rebuild's max exceeds it, a clip was
+    // just added (a copy or a paste) — the cue to put the cursor on it. Starts at
+    // startup time so the history already on disk, all of it older, counts as history
+    // rather than as one big arrival: only clips copied from now on move the cursor.
+    std::chrono::system_clock::time_point last_seen_newest_{std::chrono::system_clock::now()};
+    // The arrived clip the user has not been shown yet — the usual case, since a copy
+    // happens in another app with this window down. Empty once a summon has honoured
+    // it, or when nothing is waiting.
+    std::string pending_arrival_;
     AdwApplicationWindow* window_ = nullptr;
     Gtk::Stack* stack_ = nullptr;
     Gtk::ScrolledWindow* scrolled_ = nullptr; // holds list_; its vadjustment scrolls it
