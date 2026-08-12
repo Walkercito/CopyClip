@@ -160,6 +160,10 @@ void MainWindow::build_ui(GtkApplication* application) {
     key_controller->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
     key_controller->signal_key_pressed().connect(sigc::mem_fun(*this, &MainWindow::on_key_pressed),
                                                  false);
+    // Releases close a held-Delete run (see delete_run_disarmed_); nothing else
+    // needs them, and they carry no propagation decision.
+    key_controller->signal_key_released().connect(
+        sigc::mem_fun(*this, &MainWindow::on_key_released), false);
     // add_controller takes ownership of a ref, so gobj_copy() mints it — unlike the
     // plain gobj() handoff used for child widgets below, which would double-unref here.
     gtk_widget_add_controller(GTK_WIDGET(window_),
@@ -450,8 +454,17 @@ bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierTy
     // Caveat: an in-progress input-method preedit is not detected, so Enter and
     // the arrows preempt CJK candidate selection. Filter through Gtk::IMContext if
     // that ever matters.
-    const KeyContext context{.search_active = !search_->get_text().empty(),
-                             .button_focused = button_focused(GTK_WINDOW(window_))};
+    const bool searching = !search_->get_text().empty();
+    // Latch the role of a run of Delete presses on its opening press. Auto-repeat
+    // re-enters here with the same key still down, and emptying the query flips
+    // `searching` mid-run — without the latch that turns a text edit into an
+    // unrecoverable removal, and then into a cascade of them.
+    if (is_remove_key(keyval) && !delete_run_disarmed_.has_value()) {
+        delete_run_disarmed_ = searching;
+    }
+    const KeyContext context{.search_active = searching,
+                             .button_focused = button_focused(GTK_WINDOW(window_)),
+                             .delete_disarmed = delete_run_disarmed_.value_or(false)};
     // Same GNOME accelerator strings Settings stores; mask matches BoundAccelerator.
     const auto mod_mask = static_cast<Gdk::ModifierType>(gtk_accelerator_get_default_mod_mask());
     const auto modifiers = static_cast<unsigned int>(state & mod_mask);
@@ -482,11 +495,21 @@ bool MainWindow::on_key_pressed(guint keyval, guint /*keycode*/, Gdk::ModifierTy
         // still points at a visible match after a just-typed query.
         sync_search_from_entry();
         return pin_selection();
+    case KeyAction::RemoveSelected:
+        // Only reached with an empty search (see key_action), so no filter to sync.
+        return remove_selection();
     case KeyAction::None:
         return false;
     }
     // No default case, so a new KeyAction trips -Wswitch rather than being ignored.
     return false;
+}
+
+void MainWindow::on_key_released(guint keyval, guint /*keycode*/, Gdk::ModifierType /*state*/) {
+    // The run is over: the next Delete press re-reads the query and decides afresh.
+    if (is_remove_key(keyval)) {
+        delete_run_disarmed_.reset();
+    }
 }
 
 void MainWindow::move_selection(bool forward) {
@@ -555,6 +578,28 @@ void MainWindow::reset_to_top() {
         list_->unselect_all(); // the filter hid every card: nothing to put it on
     }
     scrolled_->get_vadjustment()->set_value(kScrollTop);
+}
+
+bool MainWindow::remove_selection() {
+    ClipCard* const card = selected_card();
+    if (card == nullptr) {
+        return false;
+    }
+    const std::string content = card->entry().content;
+    // Hand the cursor to the neighbour that will outlive the removal — next match,
+    // else previous — so rebuild_cards restores the selection there instead of
+    // letting apply_filter snap it to the top. Delete can then be held down the list.
+    Gtk::ListBoxRow* neighbour = visible_row_from(card->get_next_sibling(), true);
+    if (neighbour == nullptr) {
+        neighbour = visible_row_from(card->get_prev_sibling(), false);
+    }
+    if (neighbour != nullptr) {
+        list_->select_row(*neighbour);
+    }
+    // remove() drops the entry whatever its pin state — Delete is an explicit user
+    // act, unlike the Clear button which spares pinned clips (clear_unpinned).
+    history_.get().remove(content);
+    return true;
 }
 
 void MainWindow::reveal(Gtk::ListBoxRow& row) {
@@ -669,6 +714,9 @@ void MainWindow::present() {
     } else {
         gtk_window_set_focus(GTK_WINDOW(window_), nullptr);
     }
+    // A Delete held while the window went away never delivers its release here, so
+    // open with no run in flight rather than a key disarmed for the rest of the run.
+    delete_run_disarmed_.reset();
 }
 
 void MainWindow::refresh_tray() {
