@@ -9,6 +9,7 @@ namespace {
 
 using copyclip::ui::bound_accelerator;
 using copyclip::ui::BoundAccelerator;
+using copyclip::ui::is_remove_key;
 using copyclip::ui::key_action;
 using copyclip::ui::KeyAction;
 using copyclip::ui::KeyContext;
@@ -122,6 +123,66 @@ TEST(KeyActionTest, DeleteEditsTextWhileSearching) {
 // Modified Delete falls through so the entry keeps Ctrl+Delete (word delete).
 TEST(KeyActionTest, ModifiedDeleteFallsThrough) {
     EXPECT_EQ(act(GDK_KEY_Delete, GDK_CONTROL_MASK), KeyAction::None);
+}
+
+// Only the bare key removes: Shift+Delete is the desktop-wide "cut", and the rest
+// belong to the entry. A removal is unrecoverable, so it must not ride a chord.
+TEST(KeyActionTest, DeleteWithAnyOtherModifierFallsThrough) {
+    EXPECT_EQ(act(GDK_KEY_Delete, GDK_SHIFT_MASK), KeyAction::None);
+    EXPECT_EQ(act(GDK_KEY_Delete, GDK_ALT_MASK), KeyAction::None);
+    EXPECT_EQ(act(GDK_KEY_Delete, GDK_SUPER_MASK), KeyAction::None);
+    EXPECT_EQ(act(GDK_KEY_KP_Delete, GDK_SHIFT_MASK), KeyAction::None);
+}
+
+// With NumLock on, the keypad's delete key reports KP_Decimal — a "." the user is
+// typing. Only the NumLock-off KP_Delete may remove a clip.
+TEST(KeyActionTest, KeypadDecimalIsNotDelete) {
+    EXPECT_EQ(act(GDK_KEY_KP_Decimal), KeyAction::None);
+    EXPECT_EQ(act(GDK_KEY_KP_Decimal, 0, kSearching), KeyAction::None);
+}
+
+// Delete acts on the list selection, not the focused widget — like pin, unlike
+// Enter, which a focused button owns.
+TEST(KeyActionTest, DeleteRemovesWithAButtonFocused) {
+    EXPECT_EQ(act(GDK_KEY_Delete, 0, kOnButton), KeyAction::RemoveSelected);
+}
+
+// The hazard the disarm flag exists for: holding Delete to clear the query empties
+// the entry mid-press, flipping search_active to false. Without the latch the same
+// physical press would roll straight into removing clips, which has no undo.
+TEST(KeyActionTest, DisarmedDeleteKeepsEditingTextOnceTheQueryEmpties) {
+    constexpr KeyContext disarmed{
+        .search_active = false, .button_focused = false, .delete_disarmed = true};
+    EXPECT_EQ(act(GDK_KEY_Delete, 0, disarmed), KeyAction::None);
+    EXPECT_EQ(act(GDK_KEY_KP_Delete, 0, disarmed), KeyAction::None);
+}
+
+// The flag is scoped to the Delete run and must not disarm anything else.
+TEST(KeyActionTest, DisarmingDeleteLeavesTheOtherKeysAlone) {
+    constexpr KeyContext disarmed{
+        .search_active = false, .button_focused = false, .delete_disarmed = true};
+    EXPECT_EQ(act(GDK_KEY_Down, 0, disarmed), KeyAction::SelectNext);
+    EXPECT_EQ(act(GDK_KEY_Return, 0, disarmed), KeyAction::Paste);
+    EXPECT_EQ(act(GDK_KEY_Escape, 0, disarmed), KeyAction::Dismiss);
+}
+
+// MainWindow tracks a held Delete through this predicate, so it must cover exactly
+// the keys the policy removes on — no more (KP_Decimal is a typed ".").
+TEST(KeyActionTest, IsRemoveKeyCoversTheDeleteFamilyOnly) {
+    EXPECT_TRUE(is_remove_key(GDK_KEY_Delete));
+    EXPECT_TRUE(is_remove_key(GDK_KEY_KP_Delete));
+    EXPECT_FALSE(is_remove_key(GDK_KEY_KP_Decimal));
+    EXPECT_FALSE(is_remove_key(GDK_KEY_BackSpace));
+}
+
+// Configured shortcuts are matched before the fixed keys, so rebinding pin (or
+// paste) onto Delete silently costs the user the removal shortcut.
+TEST(KeyActionTest, RebindingOntoDeleteWinsOverRemoval) {
+    const WindowShortcuts pin_on_delete{
+        .paste = BoundAccelerator{.keyval = GDK_KEY_Return, .modifiers = 0},
+        .pin = BoundAccelerator{.keyval = GDK_KEY_Delete, .modifiers = 0},
+    };
+    EXPECT_EQ(act(GDK_KEY_Delete, 0, kFresh, pin_on_delete), KeyAction::TogglePin);
 }
 
 // Typing must reach the search entry untouched, or the filter stops working.

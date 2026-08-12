@@ -52,6 +52,10 @@ BoundAccelerator bound_accelerator(std::string_view accelerator) {
     return BoundAccelerator{.keyval = keyval, .modifiers = static_cast<unsigned int>(mods) & mask};
 }
 
+bool is_remove_key(unsigned int keyval) {
+    return keyval == GDK_KEY_Delete || keyval == GDK_KEY_KP_Delete;
+}
+
 KeyAction key_action(unsigned int keyval, unsigned int modifiers, const KeyContext& context,
                      const WindowShortcuts& shortcuts) {
     switch (keyval) {
@@ -87,16 +91,15 @@ KeyAction key_action(unsigned int keyval, unsigned int modifiers, const KeyConte
         case GDK_KEY_Down:
         case GDK_KEY_KP_Down:
             return KeyAction::SelectNext;
-        case GDK_KEY_Delete:
-        case GDK_KEY_KP_Delete:
-            // Delete removes the highlighted clip — but only outside an active search,
-            // where the entry needs Delete to forward-delete the query text.
-            if (!context.search_active) {
-                return KeyAction::RemoveSelected;
-            }
-            break;
         default:
             break;
+        }
+        // Delete removes the highlighted clip — but only outside an active search,
+        // where the entry needs Delete to forward-delete the query text, and never
+        // for a press continuing a run that began as such an edit. Removal is
+        // irreversible, so the run's opening press decides its role for all of it.
+        if (is_remove_key(keyval) && !context.search_active && !context.delete_disarmed) {
+            return KeyAction::RemoveSelected;
         }
     }
     return KeyAction::None; // typing, Tab, modified arrows, everything else

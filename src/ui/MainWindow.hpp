@@ -41,6 +41,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace copyclip::ui {
@@ -80,6 +81,8 @@ private:
     // Returns true when the key was consumed; everything else falls through to
     // the focused widget.
     bool on_key_pressed(guint keyval, guint keycode, Gdk::ModifierType state);
+    // Close the run of Delete presses tracked by delete_run_disarmed_.
+    void on_key_released(guint keyval, guint keycode, Gdk::ModifierType state);
     // Move the highlighted row to the next/previous match, and scroll it into view.
     void move_selection(bool forward);
     // Paste the highlighted clip. False when there is nothing highlighted, so the
@@ -124,6 +127,13 @@ private:
     bool refresh_pending_ = false;
     std::size_t card_count_ = 0;
     std::string search_text_;
+    // Whether the in-flight run of Delete presses began on a non-empty query — set
+    // by its first press, cleared on release, empty while no Delete is held. The
+    // run keeps that role throughout: clearing the query with a held Delete would
+    // otherwise turn destructive the instant the entry empties, and a removal has
+    // no undo. Also reset on present(), since a Delete held across a hide never
+    // delivers its release here and would leave the key disarmed for good.
+    std::optional<bool> delete_run_disarmed_;
     // The newest created_at seen so far. When a rebuild's max exceeds it, a clip was
     // just added (a copy or a paste) — the cue to put the cursor on it. Starts at
     // startup time so the history already on disk, all of it older, counts as history

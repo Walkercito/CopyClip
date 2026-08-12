@@ -144,6 +144,41 @@ TEST(HistoryServiceTest, ReAddsDuplicateAfterRemoval) {
     EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"x"}));
 }
 
+// remove() takes the entry whatever its pin state, unlike clear_unpinned. The UI's
+// Delete key rides this, so a pinned clip is one keystroke from gone.
+TEST(HistoryServiceTest, RemoveDropsAPinnedEntry) {
+    ServiceHarness harness;
+    harness.service.add("keep");
+    EXPECT_TRUE(harness.service.toggle_pin("keep"));
+    harness.service.remove("keep");
+    EXPECT_TRUE(harness.service.entries().empty());
+}
+
+// The window's card rebuild hangs off this notification; without it the deleted
+// card would stay on screen.
+TEST(HistoryServiceTest, RemoveNotifiesSubscribers) {
+    ServiceHarness harness;
+    harness.service.add("x");
+    std::vector<int> calls;
+    const auto sub = harness.service.subscribe([&calls] { calls.push_back(1); });
+    harness.service.remove("x");
+    EXPECT_TRUE(harness.service.entries().empty());
+    EXPECT_EQ(calls.size(), 1U);
+}
+
+// Removing absent content leaves the history alone — but still notifies. Holding
+// Delete can re-issue a removal for a card the deferred rebuild has not dropped
+// yet, so this path must stay harmless.
+TEST(HistoryServiceTest, RemoveOfMissingContentIsHarmless) {
+    ServiceHarness harness;
+    harness.service.add("x");
+    std::vector<int> calls;
+    const auto sub = harness.service.subscribe([&calls] { calls.push_back(1); });
+    harness.service.remove("nope");
+    EXPECT_EQ(contents_in_order(harness.service.entries()), (std::vector<std::string>{"x"}));
+    EXPECT_EQ(calls.size(), 1U); // notifies unconditionally, even for a no-op
+}
+
 TEST(HistoryServiceTest, CapEvictsOldestUnpinned) {
     ServiceHarness harness{2};
     for (const auto* text : {"a", "b", "c"}) {

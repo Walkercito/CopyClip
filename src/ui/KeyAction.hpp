@@ -27,6 +27,10 @@ enum class KeyAction : std::uint8_t {
 struct KeyContext {
     bool search_active = false;  // the search entry holds text
     bool button_focused = false; // a button has focus, so it owns Enter
+    // This Delete press continues a run that began while the query was non-empty.
+    // Such a run keeps editing text once the query empties, so holding Delete to
+    // clear the filter never rolls into destroying clips mid-press.
+    bool delete_disarmed = false;
 };
 
 // A parsed GNOME accelerator (keyval + modifier mask). Produced by
@@ -51,6 +55,10 @@ struct WindowShortcuts {
     BoundAccelerator paste;
     BoundAccelerator pin;
 };
+
+// True for the keys that remove the highlighted clip. Exposed so the window can
+// track a held Delete across press and release without duplicating the keyval list.
+[[nodiscard]] bool is_remove_key(unsigned int keyval);
 
 // Map a key event to the action it asks for. `modifiers` must already be masked
 // to gtk_accelerator_get_default_mod_mask() so it lines up with BoundAccelerator.
