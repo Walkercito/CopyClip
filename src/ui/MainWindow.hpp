@@ -7,8 +7,9 @@
 // is reconciled incrementally — only added, removed, or changed (pin/timestamp)
 // cards are touched, and a ListBox sort function repositions rows — so a single
 // new clip touches one widget, not all N. Search toggles each card's visibility in
-// place. Refreshes are deferred to an idle so a card may safely trigger one from
-// inside its own click handler.
+// place and ranks the matches, the query found verbatim above the query found as
+// scattered letters. Refreshes are deferred to an idle so a card may safely trigger
+// one from inside its own click handler.
 //
 // The window is keyboard-first: focus stays in the search entry, Up/Down move the
 // highlighted row through the filtered list, Enter pastes it, and Escape drops the
@@ -19,6 +20,7 @@
 #include "core/Interfaces.hpp"
 #include "core/SettingsService.hpp"
 #include "ui/CopyAction.hpp"
+#include "ui/Fuzzy.hpp"
 #include "ui/Paster.hpp"
 #include "ui/StatusNotifierItem.hpp"
 #include "ui/dialogs/SettingsDialog.hpp"
@@ -106,7 +108,8 @@ private:
     // Drop the filter immediately (entry + cached query + list). GtkSearchEntry's
     // search-changed is delayed ~150 ms; Escape and hide must not wait for it.
     void clear_search();
-    // Pull the live entry into search_text_ and refilter if it changed. Call before
+    // Pull the live entry into search_text_ and refilter if it changed, putting the
+    // cursor on a new query's best match. Runs on search-changed, and before
     // paste/arrows so a fast type→Enter does not act on the pre-debounce list.
     void sync_search_from_entry();
     // Scroll the list so `row` is visible — moving the selection from the search
@@ -118,7 +121,8 @@ private:
     void pin(const std::string& content);
     void clear_history();
     void open_settings();
-    [[nodiscard]] bool matches(const std::string& content) const;
+    // How `content` answers the current search query.
+    [[nodiscard]] MatchQuality match(const std::string& content) const;
 
     std::reference_wrapper<core::HistoryService> history_;
     std::reference_wrapper<core::SettingsService> settings_;
