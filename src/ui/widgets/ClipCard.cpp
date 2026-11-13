@@ -10,6 +10,9 @@
 #include <gdkmm/pixbuf.h>
 #include <gdkmm/texture.h>
 
+#include <pangomm/attributes.h>
+#include <pangomm/attrlist.h>
+
 #include <giomm/memoryinputstream.h>
 
 #include <glibmm/bytes.h>
@@ -20,6 +23,7 @@
 
 #include <glib.h>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <ctime>
@@ -78,6 +82,73 @@ constexpr int kMetaIconSize = 12;
 // Symbolic icon name for the clip's content type — the leading cue on each card.
 [[nodiscard]] const char* type_icon_name(core::ClipKind kind) {
     return kind == core::ClipKind::Image ? "image-x-generic-symbolic" : "text-x-generic-symbolic";
+}
+
+// Search hits are painted like a find-in-page match: bold over a translucent
+// yellow (GNOME palette yellow 3, #f6d32d), which reads on light and dark themes.
+constexpr guint16 kHighlightRed = 0xf6f6;
+constexpr guint16 kHighlightGreen = 0xd3d3;
+constexpr guint16 kHighlightBlue = 0x2d2d;
+constexpr guint16 kHighlightAlpha = 0x6666; // 40 %
+
+// `text` lowercased one code point at a time, with the byte offset in `text` of the
+// code point behind each folded byte — so a hit in the folded text maps back onto
+// `text` even where lowercasing changes a character's byte length.
+struct Folded {
+    std::string text;
+    std::vector<std::size_t> origin;
+};
+
+[[nodiscard]] Folded fold_case(const std::string& text) {
+    Folded folded;
+    folded.text.reserve(text.size());
+    folded.origin.reserve(text.size());
+    const char* const begin = text.data();
+    const char* const end = begin + text.size();
+    for (const char* at = begin; at < end; at = g_utf8_next_char(at)) {
+        std::array<char, 6> utf8{}; // the longest UTF-8 sequence g_unichar_to_utf8 writes
+        const auto length = static_cast<std::size_t>(
+            g_unichar_to_utf8(g_unichar_tolower(g_utf8_get_char(at)), utf8.data()));
+        folded.text.append(utf8.data(), length);
+        folded.origin.insert(folded.origin.end(), length, static_cast<std::size_t>(at - begin));
+    }
+    return folded;
+}
+
+// Pango attributes painting every hit of `query` in `text` (valid UTF-8). Hits are
+// widened to whole code points, so a highlight never splits a character.
+// shortcut: per-code-point lowercasing misses multi-character foldings (ß ↔ SS),
+// which only costs a highlight, never a match — the filter folds whole strings.
+[[nodiscard]] Pango::AttrList highlight(const std::string& text, const std::string& query) {
+    Pango::AttrList attributes;
+    if (query.empty()) {
+        return attributes;
+    }
+    const Folded folded = fold_case(text);
+    const std::vector<bool> mask = match_mask(fold_case(query).text, folded.text);
+    for (std::size_t at = 0; at < mask.size();) {
+        if (!mask[at]) {
+            ++at;
+            continue;
+        }
+        const std::size_t first = at;
+        while (at < mask.size() && mask[at]) {
+            ++at;
+        }
+        const auto start = static_cast<guint>(folded.origin[first]);
+        const char* const last = text.data() + folded.origin[at - 1];
+        const auto stop = static_cast<guint>(g_utf8_next_char(last) - text.data());
+        for (Pango::Attribute attribute :
+             {Pango::Attribute{Pango::Attribute::create_attr_weight(Pango::Weight::BOLD)},
+              Pango::Attribute{Pango::Attribute::create_attr_background(
+                  kHighlightRed, kHighlightGreen, kHighlightBlue)},
+              Pango::Attribute{Pango::Attribute::create_attr_background_alpha(kHighlightAlpha)}}) {
+            attribute.set_start_index(start);
+            attribute.set_end_index(stop);
+            attributes.insert(attribute);
+        }
+    }
+    return attributes;
 }
 
 } // namespace
@@ -193,8 +264,11 @@ ClipCard::ClipCard(const core::ClipboardEntry& entry, std::vector<std::byte> ima
 
 void ClipCard::render_text() {
     const Preview preview = make_preview(entry_.content, max_chars_);
+    const std::string shown = expanded_ ? make_valid_utf8(entry_.content) : preview.text;
 
-    content_label_->set_text(expanded_ ? entry_.content : preview.text);
+    content_label_->set_text(shown);
+    Pango::AttrList hits = highlight(shown, query_);
+    content_label_->set_attributes(hits);
     content_label_->set_ellipsize(expanded_ ? Pango::EllipsizeMode::NONE
                                             : Pango::EllipsizeMode::END);
     content_label_->set_lines(expanded_ ? -1 : kCollapsedLines);
@@ -202,6 +276,16 @@ void ClipCard::render_text() {
     toggle_button_->set_visible(preview.truncated);
     if (preview.truncated) {
         toggle_button_->set_label(expanded_ ? "Show less" : "Show all");
+    }
+}
+
+void ClipCard::set_query(const std::string& query) {
+    if (query == query_) {
+        return;
+    }
+    query_ = query;
+    if (content_label_ != nullptr) {
+        render_text();
     }
 }
 
