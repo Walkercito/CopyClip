@@ -2,6 +2,9 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+#include <string_view>
+
 namespace {
 
 using copyclip::ui::match_quality;
@@ -50,6 +53,33 @@ TEST(FuzzyTest, VerbatimClipOutranksLongClipWithScatteredLetters) {
     EXPECT_EQ(scattered, MatchQuality::Subsequence);
     EXPECT_EQ(verbatim, MatchQuality::Substring);
     EXPECT_LT(verbatim, scattered);
+}
+
+
+// The mask drawn as text: '^' under each highlighted byte, '.' elsewhere.
+std::string marks(std::string_view query, std::string_view text) {
+    std::string drawn;
+    for (const bool hit : copyclip::ui::match_mask(query, text)) {
+        drawn += hit ? '^' : '.';
+    }
+    return drawn;
+}
+
+TEST(FuzzyTest, MaskMarksEveryVerbatimOccurrence) {
+    EXPECT_EQ(marks("ab", "abxab"), "^^.^^");
+    EXPECT_EQ(marks("PNG", "a.png"), "..^^^");
+    EXPECT_EQ(marks("aa", "aaa"), "^^."); // occurrences do not overlap
+}
+
+TEST(FuzzyTest, MaskMarksScatteredCharactersWithoutAVerbatimRun) {
+    EXPECT_EQ(marks("hlo", "hello"), "^.^.^");
+    EXPECT_EQ(marks("spng", "screenshot.png"), "^..........^^^");
+}
+
+TEST(FuzzyTest, MaskIsEmptyWithoutAMatch) {
+    EXPECT_EQ(marks("", "hello"), ".....");
+    EXPECT_EQ(marks("xyz", "hello"), ".....");
+    EXPECT_EQ(marks("gnp", "png"), "...");
 }
 
 } // namespace

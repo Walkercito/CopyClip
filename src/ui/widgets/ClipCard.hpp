@@ -46,6 +46,10 @@ public:
     [[nodiscard]] MatchQuality match() const { return match_; }
     void set_match(MatchQuality match) { match_ = match; }
 
+    // Highlight where the window's current search query hits the card's text (an
+    // empty query clears the highlight). Image cards ignore it.
+    void set_query(const std::string& query);
+
 private:
     void render_text();
     void toggle_expand();
@@ -54,6 +58,7 @@ private:
     core::ClipboardEntry entry_;
     std::size_t max_chars_;
     bool expanded_ = false;
+    std::string query_; // the search query highlighted in the text
     MatchQuality match_ = MatchQuality::Substring; // no search: every card ranks alike
     Gtk::Label* content_label_ = nullptr;          // null for image cards
     Gtk::Button* toggle_button_ = nullptr;         // null for image cards

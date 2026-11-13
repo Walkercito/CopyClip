@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace copyclip::ui {
 
@@ -25,5 +26,12 @@ enum class MatchQuality : std::uint8_t {
 // ASCII fold here is then a no-op).
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): query/text read clearly.
 [[nodiscard]] MatchQuality match_quality(std::string_view query, std::string_view text);
+
+// Which bytes of `text` answer `query`, for highlighting it in the card: every
+// verbatim occurrence when there is one, else the in-order characters that make
+// it a subsequence match. Same case rules as match_quality. All false for an
+// empty query or no match.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): query/text read clearly.
+[[nodiscard]] std::vector<bool> match_mask(std::string_view query, std::string_view text);
 
 } // namespace copyclip::ui

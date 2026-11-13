@@ -419,6 +419,7 @@ void MainWindow::apply_filter() {
         const MatchQuality quality = match(card->content());
         reranked = reranked || quality != card->match();
         card->set_match(quality);
+        card->set_query(search_text_);
         const bool shown = quality != MatchQuality::None;
         card->set_visible(shown);
         if (!shown) {

@@ -44,7 +44,7 @@ Developed and tested on GNOME (Mutter), X11 and Wayland sessions. It is young so
 | 🗂️ **History** | Captures text, rich text (HTML), and images or screenshots as you copy them, newest first. |
 | 🖼️ **Image thumbnails** | Copied and pasted images render as thumbnails instead of raw byte counts. |
 | 📌 **Pinning** | Pin the clips you reuse so they stay at the top. |
-| 🔍 **Fuzzy search** | Start typing to filter the whole history — exact matches come first. |
+| 🔍 **Fuzzy search** | Start typing to filter the whole history — exact matches come first, with the hits highlighted. |
 | ⌨️ **One hotkey, both servers** | A configurable shortcut (default `Super+C`) toggles the window on X11 and Wayland. |
 | 📋 **Click to paste** | Click a clip to copy it, and optionally auto-paste it into the window you came from. |
 | 🌗 **Themes** | Dark, light, or follow the system. |
