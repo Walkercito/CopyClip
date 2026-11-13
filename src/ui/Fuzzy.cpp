@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
-#include <functional>
 #include <cstddef>
+#include <functional>
 #include <string_view>
 #include <vector>
 

@@ -58,7 +58,7 @@ private:
     core::ClipboardEntry entry_;
     std::size_t max_chars_;
     bool expanded_ = false;
-    std::string query_; // the search query highlighted in the text
+    std::string query_;                            // the search query highlighted in the text
     MatchQuality match_ = MatchQuality::Substring; // no search: every card ranks alike
     Gtk::Label* content_label_ = nullptr;          // null for image cards
     Gtk::Button* toggle_button_ = nullptr;         // null for image cards

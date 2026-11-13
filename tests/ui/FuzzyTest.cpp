@@ -55,7 +55,6 @@ TEST(FuzzyTest, VerbatimClipOutranksLongClipWithScatteredLetters) {
     EXPECT_LT(verbatim, scattered);
 }
 
-
 // The mask drawn as text: '^' under each highlighted byte, '.' elsewhere.
 std::string marks(std::string_view query, std::string_view text) {
     std::string drawn;
