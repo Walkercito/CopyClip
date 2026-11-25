@@ -65,14 +65,19 @@ void trim_heap() {
     return layout;
 }
 
-// Orders rows like HistoryService::sorted (pinned first, then newest first) so the
-// ListBox places an incrementally-inserted card in its right spot without a full
-// rebuild. Rows are always ClipCards; a defensive null check keeps it total.
+// Orders rows by how well they match the search, then like HistoryService::sorted
+// (pinned first, then newest first) so the ListBox places an incrementally-inserted
+// card in its right spot without a full rebuild. With no search every card matches
+// alike, leaving the history order. Rows are always ClipCards; a defensive null
+// check keeps it total.
 [[nodiscard]] int clip_card_sort(Gtk::ListBoxRow* lhs, Gtk::ListBoxRow* rhs) {
     const auto* a = dynamic_cast<const ClipCard*>(lhs);
     const auto* b = dynamic_cast<const ClipCard*>(rhs);
     if (a == nullptr || b == nullptr) {
         return 0;
+    }
+    if (a->match() != b->match()) {
+        return a->match() < b->match() ? -1 : 1; // closer matches first
     }
     const core::ClipboardEntry& ea = a->entry();
     const core::ClipboardEntry& eb = b->entry();
@@ -233,10 +238,8 @@ void MainWindow::build_ui(GtkApplication* application) {
 
     search_ = Gtk::make_managed<Gtk::SearchEntry>();
     search_->set_placeholder_text("Search clipboard history…");
-    search_->signal_search_changed().connect([this] {
-        search_text_ = search_->get_text().raw();
-        apply_filter();
-    });
+    search_->signal_search_changed().connect(
+        sigc::mem_fun(*this, &MainWindow::sync_search_from_entry));
     content->append(*search_);
 
     stack_ = Gtk::make_managed<Gtk::Stack>();
@@ -405,6 +408,7 @@ void MainWindow::apply_filter() {
 
     const Gtk::ListBoxRow* selected = list_->get_selected_row();
     bool selection_shown = false;
+    bool reranked = false;
     std::size_t visible = 0;
     for (Gtk::Widget* child = list_->get_first_child(); child != nullptr;
          child = child->get_next_sibling()) {
@@ -412,13 +416,21 @@ void MainWindow::apply_filter() {
         if (card == nullptr) {
             continue;
         }
-        const bool shown = matches(card->content());
+        const MatchQuality quality = match(card->content());
+        reranked = reranked || quality != card->match();
+        card->set_match(quality);
+        const bool shown = quality != MatchQuality::None;
         card->set_visible(shown);
         if (!shown) {
             continue;
         }
         ++visible;
         selection_shown = selection_shown || card == selected;
+    }
+    // Re-sort only once the walk is done: sorting reorders the very siblings it steps
+    // through. Then the cursor's fallback below lands on the best match.
+    if (reranked) {
+        list_->invalidate_sort();
     }
 
     // Always leave a row highlighted for Enter to act on. When the filter — or a
@@ -541,12 +553,17 @@ void MainWindow::clear_search() {
 }
 
 void MainWindow::sync_search_from_entry() {
-    const std::string live = search_->get_text().raw();
+    std::string live = search_->get_text().raw();
     if (live == search_text_) {
         return;
     }
-    search_text_ = live;
+    search_text_ = std::move(live);
     apply_filter();
+    // A new query re-ranks the list, so the cursor goes to its best match rather than
+    // staying on a weaker one the old query left it on: Enter pastes the top result.
+    if (!search_text_.empty()) {
+        reset_to_top();
+    }
 }
 
 bool MainWindow::activate_selection() {
@@ -672,14 +689,14 @@ void MainWindow::open_settings() {
         [this] { Glib::signal_idle().connect_once([this] { settings_dialog_.reset(); }); });
 }
 
-bool MainWindow::matches(const std::string& content) const {
+MatchQuality MainWindow::match(const std::string& content) const {
     if (search_text_.empty()) {
-        return true;
+        return MatchQuality::Substring; // the empty query: a substring of everything
     }
-    // Fuzzy subsequence match, case-folded through Glib for Unicode correctness.
-    // Sanitize the content first: a legacy clip may hold invalid UTF-8, which
-    // Glib::ustring's case-folding rejects.
-    return fuzzy_matches(Glib::ustring{search_text_}.lowercase().raw(),
+    // Fuzzy match, case-folded through Glib for Unicode correctness. Sanitize the
+    // content first: a legacy clip may hold invalid UTF-8, which Glib::ustring's
+    // case-folding rejects.
+    return match_quality(Glib::ustring{search_text_}.lowercase().raw(),
                          Glib::ustring{make_valid_utf8(content)}.lowercase().raw());
 }
 
