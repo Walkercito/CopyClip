@@ -8,6 +8,7 @@
 // reconstruct the right clipboard payload per kind.
 
 #include "core/Models.hpp"
+#include "ui/Fuzzy.hpp"
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -40,6 +41,15 @@ public:
     // incrementally — detecting a pin/timestamp change without rebuilding every card.
     [[nodiscard]] const core::ClipboardEntry& entry() const { return entry_; }
 
+    // How the card answers the window's current search. The window sets it on each
+    // filter pass, and the list sorts on it before anything else.
+    [[nodiscard]] MatchQuality match() const { return match_; }
+    void set_match(MatchQuality match) { match_ = match; }
+
+    // Highlight where the window's current search query hits the card's text (an
+    // empty query clears the highlight). Image cards ignore it.
+    void set_query(const std::string& query);
+
 private:
     void render_text();
     void toggle_expand();
@@ -48,8 +58,10 @@ private:
     core::ClipboardEntry entry_;
     std::size_t max_chars_;
     bool expanded_ = false;
-    Gtk::Label* content_label_ = nullptr;  // null for image cards
-    Gtk::Button* toggle_button_ = nullptr; // null for image cards
+    std::string query_;                            // the search query highlighted in the text
+    MatchQuality match_ = MatchQuality::Substring; // no search: every card ranks alike
+    Gtk::Label* content_label_ = nullptr;          // null for image cards
+    Gtk::Button* toggle_button_ = nullptr;         // null for image cards
     Glib::RefPtr<Gtk::GestureClick> gesture_;
     ActionCallback on_copy_;
     ActionCallback on_pin_;
